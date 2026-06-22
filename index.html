@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Social Lab is an AI-powered communication simulation platform for rehearsing difficult conversations before they happen." />
+    <meta name="theme-color" content="#F5F1EA" />
+    <title>Social Lab - 先演练，再开口</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Social Lab workspace">
+        <div class="brand-block">
+          <div class="brand-mark" aria-hidden="true">SL</div>
+          <div>
+            <strong>Social Lab</strong>
+            <span>先演练，再开口</span>
+          </div>
+        </div>
+
+        <nav class="step-list" aria-label="流程进度">
+          <button class="step-item is-active" data-step-jump="0">
+            <span>1</span>
+            <b>开始</b>
+            <small>选择沟通场景</small>
+          </button>
+          <button class="step-item" data-step-jump="1">
+            <span>2</span>
+            <b>场景</b>
+            <small>明确目标</small>
+          </button>
+          <button class="step-item" data-step-jump="2">
+            <span>3</span>
+            <b>人物</b>
+            <small>描述目标对象</small>
+          </button>
+          <button class="step-item" data-step-jump="3">
+            <span>4</span>
+            <b>画像</b>
+            <small>确认模拟参数</small>
+          </button>
+          <button class="step-item" data-step-jump="4">
+            <span>5</span>
+            <b>模拟</b>
+            <small>多轮对话预演</small>
+          </button>
+          <button class="step-item" data-step-jump="5">
+            <span>6</span>
+            <b>报告</b>
+            <small>预测与表达优化</small>
+          </button>
+        </nav>
+
+        <div class="side-note">
+          <b>隐私提醒</b>
+          <p>请勿上传身份证号、手机号、住址、银行卡号等敏感信息。模拟结果仅供沟通演练参考。</p>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="mobile-header">
+          <button class="icon-button" id="menuButton" aria-label="打开流程">☰</button>
+          <div>
+            <strong>Social Lab</strong>
+            <span id="mobileStepLabel">Step 1 / 6 - 开始</span>
+          </div>
+          <button class="icon-button" id="backButton" aria-label="返回上一步">←</button>
+        </header>
+
+        <div class="progress-track" aria-hidden="true">
+          <span id="progressFill"></span>
+        </div>
+
+        <section class="screen is-current" data-screen="0">
+          <div class="hero-grid">
+            <div class="hero-copy">
+              <div class="mini-badge">AI 人际沟通预演</div>
+              <h1>先演练，<br />再开口。</h1>
+              <p>在真实沟通前，先和 AI 生成的关系数字分身练习一遍，预判风险，并获得更稳妥的表达方式。</p>
+              <div class="hero-actions">
+                <button class="primary-action" data-next>开始模拟 <span>→</span></button>
+                <button class="secondary-action" id="loadAdvisorDemo">载入导师推荐信示例</button>
+              </div>
+            </div>
+            <div class="lab-preview" aria-label="产品流程预览">
+              <div class="preview-topline">
+                <span>本轮沟通成功率</span>
+                <strong>68%</strong>
+              </div>
+              <div class="preview-chat">
+                <p class="bubble user">老师您好，我想请您帮我写推荐信。</p>
+                <p class="bubble target">你先把申请项目、截止时间和推荐信要求发给我，我看一下是否来得及安排。</p>
+              </div>
+              <div class="mini-chart">
+                <span style="--w:68%; --c:#4563f4"></span>
+                <span style="--w:20%; --c:#f0b84f"></span>
+                <span style="--w:7%; --c:#de6b64"></span>
+                <span style="--w:5%; --c:#8fa0b8"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-title">
+            <h2>常见场景</h2>
+            <p>选择后会自动带入后续表单。</p>
+          </div>
+          <div class="scenario-grid compact">
+            <button class="scenario-card" data-preset="advisor">
+              <b>导师沟通</b>
+              <span>推荐信 / 催回复 / 申请延期</span>
+            </button>
+            <button class="scenario-card" data-preset="work">
+              <b>职场沟通</b>
+              <span>谈加薪 / 拒绝额外工作 / 汇报</span>
+            </button>
+            <button class="scenario-card" data-preset="social">
+              <b>社交沟通</b>
+              <span>道歉 / 拒绝请求 / 处理冲突</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="1">
+          <div class="screen-heading">
+            <span>Step 1 / 5 - 场景</span>
+            <h2>这次你想预演什么沟通？</h2>
+          </div>
+
+          <div class="scenario-grid">
+            <label class="choice-card">
+              <input type="radio" name="scenario" value="advisor" checked />
+              <span>
+                <b>导师沟通</b>
+                <small>推荐信 / 催回复 / 申请延期</small>
+              </span>
+            </label>
+            <label class="choice-card">
+              <input type="radio" name="scenario" value="work" />
+              <span>
+                <b>职场沟通</b>
+                <small>谈加薪 / 拒绝额外工作 / 汇报</small>
+              </span>
+            </label>
+            <label class="choice-card">
+              <input type="radio" name="scenario" value="social" />
+              <span>
+                <b>社交沟通</b>
+                <small>道歉 / 拒绝请求 / 处理冲突</small>
+              </span>
+            </label>
+          </div>
+
+          <div class="form-stack">
+            <label>
+              <span>你的沟通目标是什么？</span>
+              <input id="goalInput" value="我想请导师帮我写推荐信" />
+            </label>
+            <label>
+              <span>期望结果，可选</span>
+              <input id="outcomeInput" value="希望导师愿意帮忙，并且不要觉得我太唐突" />
+            </label>
+          </div>
+
+          <p class="helper-text">目标太短也可以继续，但补充更多背景会让模拟更准确。</p>
+          <div class="footer-actions">
+            <button class="primary-action" data-next>继续创建人物 <span>→</span></button>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="2">
+          <div class="screen-heading">
+            <span>Step 2 / 5 - 人物</span>
+            <h2>你想模拟谁？</h2>
+          </div>
+
+          <div class="form-stack two-column">
+            <label>
+              <span>身份</span>
+              <input id="roleInput" value="我的导师" />
+            </label>
+            <label>
+              <span>你们现在是什么关系？</span>
+              <input id="relationInput" value="我上过他的课，也帮他做过一次项目。" />
+            </label>
+            <label>
+              <span>他/她平时怎么沟通？</span>
+              <textarea id="habitInput">回复慢，比较严格，喜欢有逻辑的人，不喜欢被催。</textarea>
+            </label>
+            <label>
+              <span>可选：粘贴聊天记录</span>
+              <textarea id="chatLogInput" placeholder="可以粘贴微信、邮件或短信片段。建议先删除姓名、电话等隐私信息。"></textarea>
+            </label>
+          </div>
+
+          <div class="inline-warning">
+            <strong>请先去除敏感信息</strong>
+            <p>Social Lab 不会自动联系真实人物，也不承诺完全还原对方。这里生成的是一次沟通模拟参数。</p>
+          </div>
+
+          <div class="footer-actions">
+            <button class="primary-action" id="generatePersona">生成画像 <span>↻</span></button>
+          </div>
+        </section>
+
+        <section class="screen" data-screen="3">
+          <div class="screen-heading">
+            <span>Step 3 / 5 - 画像</span>
+            <h2 id="personaTitle">导师画像</h2>
+            <p>AI 根据你的描述生成，用于本次模拟，不代表事实判断。</p>
+          </div>
+
+          <div class="dashboard-grid">
+            <article class="card-block persona-card">
+              <div class="card-header">
+                <span>Persona Card</span>
+                <button class="text-button" id="tunePersona">微调画像</button>
+              </div>
+              <div class="trait-grid">
+                <div>
+                  <small>沟通风格</small>
+                  <b id="styleTrait">理性型</b>
+                </div>
+                <div>
+                  <small>回复速度</small>
+                  <b id="speedTrait">偏慢</b>
+                </div>
+                <div>
+                  <small>关注重点</small>
+                  <b id="focusTrait">逻辑、材料完整度</b>
+                </div>
+                <div class="risk-tile">
+                  <small>风险点</small>
+                  <b id="riskTrait">不喜欢被催促</b>
+                </div>
+              </div>
+            </article>
+
+            <article class="card-block">
+              <div class="card-header">
+                <span>Relationship State</span>
+                <small>模拟参数</small>
+              </div>
+              <div class="state-list" id="stateList"></div>
+            </article>
+          </div>
+
+          <div class="strategy-box">
+            <b>推荐策略</b>
+            <p id="strategyText">先说明申请背景和截止时间，再提出请求；主动提供材料、草稿和时间安排，降低对方时间成本。</p>
+          </div>
+
+          <div class="footer-actions">
+            <button class="primary-action" id="startChat">开始模拟 <span>↗</span></button>
+          </div>
+        </section>
+
+        <section class="screen chat-screen" data-screen="4">
+          <div class="chat-top">
+            <div>
+              <span>Step 4 / 5 - 模拟</span>
+              <h2 id="chatTitle">导师 · 推荐信模拟</h2>
+              <p id="chatSubline">当前态度：谨慎</p>
+            </div>
+            <button class="secondary-action compact-button" id="resetChat">重新开始</button>
+          </div>
+
+          <div class="state-chip" id="focusChip">对方目前关注：截止时间、申请材料、是否临时请求</div>
+
+          <div class="chat-window" id="chatWindow" aria-live="polite"></div>
+
+          <div class="composer">
+            <input id="messageInput" placeholder="输入下一句话..." />
+            <button class="send-button" id="sendMessage" aria-label="发送">↗</button>
+          </div>
+          <button class="dark-action" id="finishSimulation">结束模拟并查看分析</button>
+        </section>
+
+        <section class="screen" data-screen="5">
+          <div class="screen-heading">
+            <span>Step 5 / 5 - 报告</span>
+            <h2>本轮复盘报告</h2>
+          </div>
+
+          <div class="report-grid">
+            <article class="score-card">
+              <span>本轮沟通成功率</span>
+              <strong id="successScore">68%</strong>
+              <p id="scoreReason">语气礼貌、有合作基础是正向因素；背景说明不足和权力距离较高仍有风险。</p>
+            </article>
+
+            <article class="card-block">
+              <div class="card-header">
+                <span>可能结果</span>
+                <small>模拟分布</small>
+              </div>
+              <div class="outcome-list" id="outcomeList"></div>
+            </article>
+
+            <article class="card-block yellow-note">
+              <h3>主要影响因素</h3>
+              <ul id="factorList"></ul>
+            </article>
+
+            <article class="card-block rewrite-card">
+              <h3>推荐改写</h3>
+              <p id="rewriteText"></p>
+              <button class="secondary-action" id="copyRewrite">复制优化表达</button>
+            </article>
+          </div>
+
+          <div class="footer-actions">
+            <button class="primary-action" id="retryWithRewrite">用这个版本重新模拟 <span>↻</span></button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="./app.js"></script>
+  </body>
+</html>
