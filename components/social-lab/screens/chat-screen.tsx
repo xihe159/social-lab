@@ -1,0 +1,96 @@
+import { RefreshCw, Send } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type { ChatMessage, Persona } from "@/lib/social-lab-types";
+
+type ChatScreenProps = {
+  title: string;
+  persona: Persona;
+  messages: ChatMessage[];
+  onSend: (message: string) => void;
+  onReset: () => void;
+  onFinish: () => void;
+  initialDraft: string;
+};
+
+export function ChatScreen({
+  title,
+  persona,
+  messages,
+  onSend,
+  onReset,
+  onFinish,
+  initialDraft,
+}: ChatScreenProps) {
+  const [draft, setDraft] = useState(initialDraft);
+  const chatWindowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setDraft(initialDraft);
+  }, [initialDraft]);
+
+  useEffect(() => {
+    chatWindowRef.current?.scrollTo({
+      top: chatWindowRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [messages]);
+
+  const send = () => {
+    const value = draft.trim();
+    if (!value) return;
+    onSend(value);
+    setDraft("");
+  };
+
+  return (
+    <section className="screen chat-screen is-current">
+      <div className="chat-top">
+        <div>
+          <span>Step 4 / 5 - 模拟</span>
+          <h2>{title}</h2>
+          <p>当前态度：谨慎</p>
+        </div>
+        <button
+          className="secondary-action compact-button"
+          onClick={onReset}
+          type="button"
+        >
+          <RefreshCw size={16} /> 重新开始
+        </button>
+      </div>
+
+      <div className="state-chip">对方目前关注：{persona.focus}</div>
+
+      <div className="chat-window" ref={chatWindowRef} aria-live="polite">
+        {messages.map((message) => (
+          <p className={`bubble ${message.role}`} key={message.id}>
+            {message.text}
+          </p>
+        ))}
+      </div>
+
+      <div className="composer">
+        <input
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") send();
+          }}
+          placeholder="输入下一句话..."
+        />
+        <button
+          className="send-button"
+          onClick={send}
+          aria-label="发送"
+          title="发送"
+          type="button"
+        >
+          <Send size={20} />
+        </button>
+      </div>
+      <button className="dark-action" onClick={onFinish} type="button">
+        结束模拟并查看分析
+      </button>
+    </section>
+  );
+}
