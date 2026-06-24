@@ -2,6 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { MobileHeader } from "./mobile-header";
+// G 20260624
+/*
+    前端不再直接使用本地规则函数 buildPersona()，而是改为调用你新写的 API 接口
+    把“生成人物画像”的能力从本地规则函数，替换成一个 API 调用函数
+*/
+import { createPersona } from "@/lib/social-lab-api";
+// G 20260624 #
 import { Sidebar } from "./sidebar";
 import { ChatScreen } from "./screens/chat-screen";
 import { LandingScreen } from "./screens/landing-screen";
@@ -64,14 +71,36 @@ export function SocialLabApp() {
     if (openScenario) goToStep(1);
   };
 
-  const generatePersona = () => {
-    if (!form.role.trim()) {
-      showToast("请至少说明你想模拟谁。");
-      return;
-    }
-    setPersona(buildPersona(scenario, form));
+// G 20260624
+/* 不会破坏原来的 MVP，也不会让项目因为 LLM 服务失败而完全不可用 */
+const [personaLoading, setPersonaLoading] = useState(false);
+
+const generatePersona = async () => {
+  if (!form.role.trim()) {
+    showToast("请至少说明你想模拟谁。");
+    return;
+  }
+
+  try {
+    setPersonaLoading(true);
+
+    const result = await createPersona(scenario, form);
+
+    setPersona(result.persona);
     goToStep(3);
-  };
+  } catch {
+    // 兜底：LLM 或 Python 服务失败时，仍然使用原本的规则逻辑
+    // G 20260624
+    const result = await createPersona(scenario, form);
+    setPersona(result.persona);
+    // G 20260624 #
+    showToast("AI 画像生成失败，已使用本地规则兜底。");
+    goToStep(3);
+  } finally {
+    setPersonaLoading(false);
+  }
+};
+// G 20260624 #
 
   const startChat = (draft = "") => {
     setMessages([
