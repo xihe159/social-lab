@@ -1,124 +1,179 @@
-from fastapi import FastAPI, HTTPException
+from __future__ import annotations
+
+from typing import Optional
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-from app.schemas import PersonaCreateRequest, PersonaCreateResponse
-from app.agents.persona_agent import PersonaAgent
-from app.llm.client import client, LLM_MODEL
-from app.llm.client import client, LLM_MODEL
-
 from pydantic import BaseModel, Field
 
+from app.api.persona import router as persona_router
+from app.api.session import router as session_router
+from app.api.report import router as report_router
 
 
-app = FastAPI(title="Social Lab Agent API")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-persona_agent = PersonaAgent()
-
-@app.get("/")
-async def root():
-    return {
-        "message": "Social Lab Agent API is running",
-        "docs": "/docs",
-        "health": "/health"
-    }
-
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
+try:
+    from app.llm.client import LLMClientError
+except ImportError:  # 兼容早期 llm/client.py
+    class LLMClientError(RuntimeError):
+        pass
 
 
-@app.post("/api/persona/create")
-async def create_persona(request: PersonaCreateRequest):
+try:
+    from app.llm.client import LLM_MODEL_ID as ACTIVE_LLM_MODEL
+except ImportError:
     try:
-        result = await persona_agent.run(request)
-        return {
-            "ok": True,
-            "data": result
-        }
-    except Exception as exc:
-        return {
-            "ok": False,
-            "error_type": exc.__class__.__name__,
-            "error": str(exc)
-        }
+        from app.llm.client import LLM_MODEL as ACTIVE_LLM_MODEL
+    except ImportError:
+        ACTIVE_LLM_MODEL = "unknown"
 
-@app.get("/api/debug/llm")
-async def debug_llm():
-    response = await client.chat.completions.create(
-        model=LLM_MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": "你是一个测试助手，只返回一句中文。"
-            },
-            {
-                "role": "user",
-                "content": "请回复：LLM 接入成功。"
-            }
-        ],
-        temperature=0
-    )
 
-    return {
-        "model": LLM_MODEL,
-        "content": response.choices[0].message.content
-    }
+try:
+    from app.llm.client import generate_text
+except ImportError:
+    generate_text = None
+
 
 class DebugChatRequest(BaseModel):
     system_prompt: str = Field(
         default="你是 Social Lab 的测试助手，请自然、灵活、具体地回答用户问题。",
-        description="系统提示词"
+        description="系统提示词",
     )
-    user_message: str = Field(
-        description="用户输入"
-    )
+    user_message: str = Field(description="用户输入")
     temperature: float = Field(
         default=0.7,
         ge=0,
         le=1.5,
-        description="回答随机性，越高越灵活"
+        description="回答随机性，越高越灵活",
     )
 
 
-@app.post("/api/debug/chat")
-async def debug_chat(request: DebugChatRequest):
-    try:
-        response = await client.chat.completions.create(
-            model=LLM_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": request.system_prompt,
-                },
-                {
-                    "role": "user",
-                    "content": request.user_message,
-                },
-            ],
-            temperature=request.temperature,
+async def _call_debug_llm(
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    temperature: float = 0.7,
+) -> str:
+    """
+    Debug 专用的普通文本调用。
+
+    优先使用新版 app.llm.client.generate_text；
+    如果当前 llm/client.py 仍然是旧版，则兼容旧的 client + LLM_MODEL 写法。
+    """
+
+    if generate_text is not None:
+        return await generate_text(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
         )
 
+    try:
+        from app.llm.client import get_async_client
+
+        llm_client = get_async_client()
+    except ImportError:
+        from app.llm.client import client as llm_client
+
+    response = await llm_client.chat.completions.create(
+        model=ACTIVE_LLM_MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": system_prompt,
+            },
+            {
+                "role": "user",
+                "content": user_prompt,
+            },
+        ],
+        temperature=temperature,
+    )
+
+    content: Optional[str] = response.choices[0].message.content
+    return content or ""
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="Social Lab Agent API",
+        version="0.2.0",
+        description="Social Lab 后端 Agent 稳定服务层 API",
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    app.include_router(persona_router)
+    app.include_router(session_router)
+    app.include_router(report_router)
+
+    @app.get("/")
+    async def root():
         return {
-            "ok": True,
-            "model": LLM_MODEL,
-            "content": response.choices[0].message.content,
+            "message": "Social Lab Agent API is running",
+            "version": "0.2.0",
+            "docs": "/docs",
+            "health": "/health",
         }
 
-    except Exception as exc:
+    @app.get("/health")
+    async def health():
         return {
-            "ok": False,
-            "model": LLM_MODEL,
-            "error_type": exc.__class__.__name__,
-            "error": str(exc),
+            "status": "ok",
+            "service": "social-lab-agent-api",
         }
+
+    @app.get("/api/debug/llm")
+    async def debug_llm():
+        try:
+            content = await _call_debug_llm(
+                system_prompt="你是一个测试助手，只返回一句中文。",
+                user_prompt="请回复：LLM 接入成功。",
+                temperature=0,
+            )
+            return {
+                "ok": True,
+                "model": ACTIVE_LLM_MODEL,
+                "content": content,
+            }
+        except Exception as exc:
+            return {
+                "ok": False,
+                "model": ACTIVE_LLM_MODEL,
+                "error_type": exc.__class__.__name__,
+                "error": str(exc),
+            }
+
+    @app.post("/api/debug/chat")
+    async def debug_chat(request: DebugChatRequest):
+        try:
+            content = await _call_debug_llm(
+                system_prompt=request.system_prompt,
+                user_prompt=request.user_message,
+                temperature=request.temperature,
+            )
+            return {
+                "ok": True,
+                "model": ACTIVE_LLM_MODEL,
+                "content": content,
+            }
+        except Exception as exc:
+            return {
+                "ok": False,
+                "model": ACTIVE_LLM_MODEL,
+                "error_type": exc.__class__.__name__,
+                "error": str(exc),
+            }
+
+    return app
+
+
+app = create_app()
