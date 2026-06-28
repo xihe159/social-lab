@@ -2,13 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { MobileHeader } from "./mobile-header";
-// G 20260624
-/*
-    前端不再直接使用本地规则函数 buildPersona()，而是改为调用你新写的 API 接口
-    把“生成人物画像”的能力从本地规则函数，替换成一个 API 调用函数
-*/
-import { createPersona } from "@/lib/social-lab-api";
-// G 20260624 #
+// G 20260628
+import {
+  createPersona,
+  createSimulationReport,
+  sendSessionMessage,
+} from "@/lib/social-lab-api";
+
 import { Sidebar } from "./sidebar";
 import { ChatScreen } from "./screens/chat-screen";
 import { LandingScreen } from "./screens/landing-screen";
@@ -71,9 +71,9 @@ export function SocialLabApp() {
     if (openScenario) goToStep(1);
   };
 
-// G 20260624
-/* 不会破坏原来的 MVP，也不会让项目因为 LLM 服务失败而完全不可用 */
 const [personaLoading, setPersonaLoading] = useState(false);
+const [messageLoading, setMessageLoading] = useState(false);
+const [reportLoading, setReportLoading] = useState(false);
 
 const generatePersona = async () => {
   if (!form.role.trim()) {
@@ -83,42 +83,71 @@ const generatePersona = async () => {
 
   try {
     setPersonaLoading(true);
-
     const result = await createPersona(scenario, form);
-
     setPersona(result.persona);
+    setMessages([
+      {
+        id: crypto.randomUUID(),
+        role: "target",
+        text: result.opening_message,
+      },
+    ]);
     goToStep(3);
-  } catch {
-    // 兜底：LLM 或 Python 服务失败时，仍然使用原本的规则逻辑
-    // G 20260624
-    const result = await createPersona(scenario, form);
-    setPersona(result.persona);
-    // G 20260624 #
+  } catch (error) {
+    console.error(error);
+    setPersona(buildPersona(scenario, form));
     showToast("AI 画像生成失败，已使用本地规则兜底。");
     goToStep(3);
   } finally {
     setPersonaLoading(false);
   }
 };
-// G 20260624 #
 
-  const startChat = (draft = "") => {
-    setMessages([
+const startChat = (draft = "") => {
+  setMessages((current) => {
+    if (current.length > 0) return current;
+    return [
       {
         id: crypto.randomUUID(),
         role: "target",
         text: firstTargetMessage(scenario),
       },
-    ]);
-    setScore(68);
-    setRetryDraft(draft);
-    goToStep(4);
+    ];
+  });
+  setScore(68);
+  setRetryDraft(draft);
+  goToStep(4);
+};
+
+const sendMessage = async (text: string) => {
+  if (messageLoading) return;
+
+  const userMessage = {
+    id: crypto.randomUUID(),
+    role: "user" as const,
+    text,
   };
 
-  const sendMessage = (text: string) => {
+  const nextMessages = [...messages, userMessage];
+  setMessages(nextMessages);
+
+  try {
+    setMessageLoading(true);
+    const result = await sendSessionMessage(
+      scenario,
+      form,
+      persona,
+      messages,
+      text,
+    );
+
+    setMessages((current) => [...current, result.targetMessage]);
+    setPersona(result.updatedPersona);
+    setScore((current) => scoreMessage(current, text));
+  } catch (error) {
+    console.error(error);
     setMessages((current) => [
       ...current,
-      { id: crypto.randomUUID(), role: "user", text },
       {
         id: crypto.randomUUID(),
         role: "target",
@@ -126,26 +155,60 @@ const generatePersona = async () => {
       },
     ]);
     setScore((current) => scoreMessage(current, text));
-  };
+    showToast("AI 回复失败，已使用本地规则兜底。");
+  } finally {
+    setMessageLoading(false);
+  }
+};
 
-  const finishSimulation = () => {
-    const nextReport = buildReport(
+const finishSimulation = async () => {
+  try {
+    setReportLoading(true);
+    const nextReport = await createSimulationReport(
+      scenario,
+      form,
+      persona,
+      messages,
+    );
+    setReport(nextReport);
+    goToStep(5);
+  } catch (error) {
+    console.error(error);
+    const fallbackReport = buildReport(
       scenario,
       score,
       messages.some((message) => message.role === "user"),
     );
-    setReport(nextReport);
+    setReport(fallbackReport);
+    showToast("AI 报告生成失败，已使用本地规则兜底。");
     goToStep(5);
-  };
+  } finally {
+    setReportLoading(false);
+  }
+};
 
-  const copyRewrite = async () => {
-    try {
-      await navigator.clipboard.writeText(report.rewrite);
-      showToast("已复制优化表达。");
-    } catch {
-      showToast("复制失败，可以直接选中文本复制。");
-    }
-  };
+const copyRewrite = async () => {
+  try {
+    await navigator.clipboard.writeText(report.rewrite);
+    showToast("改写话术已复制。");
+  } catch (error) {
+    console.error(error);
+    showToast("复制失败，请手动选择文本复制。");
+  }
+};
+
+const resetChat = () => {
+  setMessages([
+    {
+      id: crypto.randomUUID(),
+      role: "target",
+      text: firstTargetMessage(scenario),
+    },
+  ]);
+  setScore(68);
+  setRetryDraft("");
+  goToStep(4);
+};
 
   return (
     <div className="app-shell">
@@ -216,7 +279,7 @@ const generatePersona = async () => {
             messages={messages}
             initialDraft={retryDraft}
             onSend={sendMessage}
-            onReset={() => startChat()}
+            onReset={resetChat}
             onFinish={finishSimulation}
           />
         )}
@@ -239,3 +302,7 @@ const generatePersona = async () => {
     </div>
   );
 }
+
+
+
+// G 20260628 #
