@@ -7,6 +7,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from app.schemas.common import RelationshipState, ScenarioKey
 from app.schemas.persona import Persona
 from app.schemas.memory import SessionMemory
+from app.schemas.safety import SafetyCheckResponse
 
 class ChatMessage(BaseModel):
     """
@@ -117,3 +118,9 @@ class SessionMessageResponse(BaseModel):
         default=None,
         description="更新后的当前会话短期记忆",
     )
+    safety: Optional[SafetyCheckResponse] = Field(
+        default=None,
+        description="本轮安全检查结果；无风险或未执行时可以为空",
+    )
+
+
