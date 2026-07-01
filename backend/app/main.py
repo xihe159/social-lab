@@ -1,3 +1,6 @@
+# social-lab/backend/app/main.py
+# 2026/07/01
+
 from __future__ import annotations
 
 from typing import Optional
@@ -9,7 +12,8 @@ from pydantic import BaseModel, Field
 from app.api.persona import router as persona_router
 from app.api.session import router as session_router
 from app.api.report import router as report_router
-
+from app.api.strategy import router as strategy_router
+from app.api.evaluation import router as evaluation_router
 
 try:
     from app.llm.client import LLMClientError
@@ -114,6 +118,8 @@ def create_app() -> FastAPI:
     app.include_router(persona_router)
     app.include_router(session_router)
     app.include_router(report_router)
+    app.include_router(strategy_router)
+    app.include_router(evaluation_router)
 
     @app.get("/")
     async def root():
