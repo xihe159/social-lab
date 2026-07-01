@@ -80,7 +80,7 @@ def _ensure_additional_properties_false(schema: dict) -> dict:
 
     return schema
 
-
+#G 20260629
 def _make_strict_json_schema(schema: dict) -> dict:
     """
     将 Pydantic 生成的 JSON Schema 调整为 strict structured output 更容易接受的形式。
@@ -89,10 +89,22 @@ def _make_strict_json_schema(schema: dict) -> dict:
     1. 所有 object 都显式 additionalProperties=false
     2. 所有 object 的 required 都包含 properties 中的全部字段
     3. 删除 default，避免部分兼容 OpenAI 的模型服务拒绝 schema
-    4. 递归处理 $defs、properties、items、anyOf、oneOf、allOf
+    4. 如果出现 $ref，则移除 description/title 等兄弟字段
+    5. 递归处理 $defs、properties、items、anyOf、oneOf、allOf
     """
 
     if not isinstance(schema, dict):
+        return schema
+
+    # 关键修复：
+    # 某些兼容 OpenAI 的服务不允许 $ref 与 description/title/default 等字段并存。
+    # 例如：
+    # {"$ref": "#/$defs/StateDelta", "description": "..."}
+    # 会报错：$ref cannot have keywords {'description'}
+    if "$ref" in schema:
+        ref = schema["$ref"]
+        schema.clear()
+        schema["$ref"] = ref
         return schema
 
     schema.pop("default", None)
@@ -131,7 +143,7 @@ def _make_strict_json_schema(schema: dict) -> dict:
                 _make_strict_json_schema(value)
 
     return schema
-
+#G 20260629 #
 
 def _build_json_schema_response_format(output_model: Type[BaseModel]) -> dict:
     schema = output_model.model_json_schema()

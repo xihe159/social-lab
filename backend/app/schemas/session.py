@@ -1,10 +1,13 @@
-from typing import List, Literal
+from __future__ import annotations
+
+from typing import List, Literal, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from app.schemas.common import RelationshipState, ScenarioKey
 from app.schemas.persona import Persona
-
+from app.schemas.memory import SessionMemory
+from app.schemas.safety import SafetyCheckResponse
 
 class ChatMessage(BaseModel):
     """
@@ -43,6 +46,12 @@ class StateDelta(BaseModel):
 class SessionMessageRequest(BaseModel):
     """
     用户发送一条消息后，请求 Target/Simulation Agent 生成目标人物回复。
+
+    memory:
+    - 可选字段，用于保存当前会话的短期记忆。
+    - 前端暂时不传也可以正常运行。
+    - 后续前端可以把上一次返回的 updated_memory 再传回来，
+      让 MemoryAgent 在多轮对话中持续更新会话摘要。
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
@@ -57,6 +66,10 @@ class SessionMessageRequest(BaseModel):
     persona: Persona
     messages: List[ChatMessage] = Field(default_factory=list, description="已有对话历史")
     user_message: str = Field(description="用户最新输入的消息")
+    memory: Optional[SessionMemory] = Field(
+        default=None,
+        description="当前会话短期记忆；首次对话可以为空",
+    )
 
     @property
     def user_goal(self) -> str:
@@ -70,6 +83,10 @@ class SessionMessageRequest(BaseModel):
 class SimulationReply(BaseModel):
     """
     SimulationAgent 的结构化输出。
+
+    注意：
+    这是 LLM structured output 的输出模型之一。
+    字段不要设置默认值，否则部分 strict JSON Schema 服务会要求报错。
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -85,6 +102,11 @@ class SimulationReply(BaseModel):
 class SessionMessageResponse(BaseModel):
     """
     单轮模拟回复接口返回。
+
+    updated_memory:
+    - MemoryAgent 成功时返回新的会话记忆。
+    - MemoryAgent 失败或尚未启用时可以为 None。
+    - 前端可以先忽略该字段，不影响 target_message / simulation / updated_state 的展示。
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -92,3 +114,13 @@ class SessionMessageResponse(BaseModel):
     target_message: ChatMessage
     simulation: SimulationReply
     updated_state: RelationshipState
+    updated_memory: Optional[SessionMemory] = Field(
+        default=None,
+        description="更新后的当前会话短期记忆",
+    )
+    safety: Optional[SafetyCheckResponse] = Field(
+        default=None,
+        description="本轮安全检查结果；无风险或未执行时可以为空",
+    )
+
+
