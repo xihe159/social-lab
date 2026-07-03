@@ -21,6 +21,8 @@ dist/
 build/
 .next/
 out/
+tsconfig.tsbuildinfo
 
 # Runtime caches
 .cache/
+.codex-scratch-design/

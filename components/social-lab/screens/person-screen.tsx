@@ -5,12 +5,14 @@ type PersonScreenProps = {
   form: FormData;
   onFormChange: (patch: Partial<FormData>) => void;
   onGenerate: () => void;
+  isGenerating: boolean;
 };
 
 export function PersonScreen({
   form,
   onFormChange,
   onGenerate,
+  isGenerating,
 }: PersonScreenProps) {
   return (
     <section className="screen is-current">
@@ -60,8 +62,14 @@ export function PersonScreen({
       </div>
 
       <div className="footer-actions">
-        <button className="primary-action" onClick={onGenerate} type="button">
-          生成画像 <RefreshCw size={18} />
+        <button
+          className="primary-action"
+          disabled={isGenerating}
+          onClick={onGenerate}
+          type="button"
+        >
+          {isGenerating ? "正在生成画像..." : "生成画像"}{" "}
+          <RefreshCw size={18} />
         </button>
       </div>
     </section>

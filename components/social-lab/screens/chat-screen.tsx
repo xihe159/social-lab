@@ -10,6 +10,8 @@ type ChatScreenProps = {
   onReset: () => void;
   onFinish: () => void;
   initialDraft: string;
+  isSending: boolean;
+  isFinishing: boolean;
 };
 
 export function ChatScreen({
@@ -20,6 +22,8 @@ export function ChatScreen({
   onReset,
   onFinish,
   initialDraft,
+  isSending,
+  isFinishing,
 }: ChatScreenProps) {
   const [draft, setDraft] = useState(initialDraft);
   const chatWindowRef = useRef<HTMLDivElement>(null);
@@ -37,7 +41,7 @@ export function ChatScreen({
 
   const send = () => {
     const value = draft.trim();
-    if (!value) return;
+    if (!value || isSending) return;
     onSend(value);
     setDraft("");
   };
@@ -52,6 +56,7 @@ export function ChatScreen({
         </div>
         <button
           className="secondary-action compact-button"
+          disabled={isSending || isFinishing}
           onClick={onReset}
           type="button"
         >
@@ -76,11 +81,13 @@ export function ChatScreen({
           onKeyDown={(event) => {
             if (event.key === "Enter") send();
           }}
+          disabled={isSending || isFinishing}
           placeholder="输入下一句话..."
         />
         <button
           className="send-button"
           onClick={send}
+          disabled={isSending || isFinishing}
           aria-label="发送"
           title="发送"
           type="button"
@@ -88,8 +95,13 @@ export function ChatScreen({
           <Send size={20} />
         </button>
       </div>
-      <button className="dark-action" onClick={onFinish} type="button">
-        结束模拟并查看分析
+      <button
+        className="dark-action"
+        disabled={isSending || isFinishing}
+        onClick={onFinish}
+        type="button"
+      >
+        {isFinishing ? "正在生成分析..." : "结束模拟并查看分析"}
       </button>
     </section>
   );

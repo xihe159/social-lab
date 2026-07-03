@@ -180,10 +180,10 @@ export function buildReport(
         ? "表达较清晰，并且主动降低了对方理解和行动成本，整体风险可控。"
         : "语气基本礼貌，但背景、截止时间或对方成本说明仍不足，可能让对方保持谨慎。",
     outcomes: [
-      { label: "接受", value: finalScore, color: "#4563f4" },
-      { label: "犹豫", value: hesitate, color: "#f0b84f" },
-      { label: "拒绝", value: reject, color: "#de6b64" },
-      { label: "冷处理", value: ignore, color: "#8fa0b8" },
+      { label: "接受", value: finalScore, color: "#c8f47a" },
+      { label: "犹豫", value: hesitate, color: "#f2d59b" },
+      { label: "拒绝", value: reject, color: "#e8b7b0" },
+      { label: "冷处理", value: ignore, color: "#b9c4d3" },
     ],
     factors,
     rewrite: buildRewrite(scenario),

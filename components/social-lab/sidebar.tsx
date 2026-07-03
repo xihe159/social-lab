@@ -3,12 +3,14 @@ import { stepDescriptions, stepLabels } from "@/lib/social-lab-data";
 type SidebarProps = {
   currentStep: number;
   isOpen: boolean;
+  maxUnlockedStep: number;
   onStepChange: (step: number) => void;
 };
 
 export function Sidebar({
   currentStep,
   isOpen,
+  maxUnlockedStep,
   onStepChange,
 }: SidebarProps) {
   return (
@@ -30,6 +32,7 @@ export function Sidebar({
         {stepLabels.map((label, index) => (
           <button
             className={`step-item${currentStep === index ? " is-active" : ""}`}
+            disabled={index > maxUnlockedStep}
             key={label}
             onClick={() => onStepChange(index)}
             type="button"

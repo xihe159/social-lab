@@ -2,6 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { MobileHeader } from "./mobile-header";
+import {
+  createPersona,
+  createSimulationReport,
+  sendSessionMessage,
+} from "@/lib/social-lab-api";
 import { Sidebar } from "./sidebar";
 import { ChatScreen } from "./screens/chat-screen";
 import { LandingScreen } from "./screens/landing-screen";
@@ -10,14 +15,7 @@ import { PersonScreen } from "./screens/person-screen";
 import { ReportScreen } from "./screens/report-screen";
 import { ScenarioScreen } from "./screens/scenario-screen";
 import { scenarioPresets } from "@/lib/social-lab-data";
-import {
-  buildPersona,
-  buildReply,
-  buildReport,
-  firstTargetMessage,
-  formFromScenario,
-  scoreMessage,
-} from "@/lib/social-lab-logic";
+import { formFromScenario } from "@/lib/social-lab-logic";
 import type {
   ChatMessage,
   FormData,
@@ -32,84 +30,156 @@ export function SocialLabApp() {
   const [form, setForm] = useState<FormData>(() =>
     formFromScenario("advisor"),
   );
-  const [persona, setPersona] = useState<Persona>(() =>
-    buildPersona("advisor", formFromScenario("advisor")),
-  );
+  const [persona, setPersona] = useState<Persona | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [score, setScore] = useState(68);
-  const [report, setReport] = useState<SimulationReport>(() =>
-    buildReport("advisor", 68, false),
-  );
+  const [report, setReport] = useState<SimulationReport | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [retryDraft, setRetryDraft] = useState("");
+  const [maxUnlockedStep, setMaxUnlockedStep] = useState(1);
+  const [personaLoading, setPersonaLoading] = useState(false);
+  const [messageLoading, setMessageLoading] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
 
   const preset = scenarioPresets[scenario];
   const progress = useMemo(() => `${((step + 1) / 6) * 100}%`, [step]);
-
-  const goToStep = (nextStep: number) => {
-    setStep(Math.max(0, Math.min(5, nextStep)));
-    setSidebarOpen(false);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
 
   const showToast = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 1800);
   };
 
+  const goToStep = (nextStep: number) => {
+    const safeStep = Math.max(0, Math.min(5, nextStep));
+    if (safeStep > maxUnlockedStep) {
+      showToast("请先完成前面的步骤。");
+      setSidebarOpen(false);
+      return;
+    }
+    setStep(safeStep);
+    setSidebarOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const unlockAndGo = (nextStep: number) => {
+    setMaxUnlockedStep((current) => Math.max(current, nextStep));
+    setStep(nextStep);
+    setSidebarOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const selectScenario = (nextScenario: ScenarioKey, openScenario = false) => {
     setScenario(nextScenario);
     setForm(formFromScenario(nextScenario));
-    if (openScenario) goToStep(1);
+    setPersona(null);
+    setMessages([]);
+    setReport(null);
+    setRetryDraft("");
+    setMaxUnlockedStep(1);
+    if (openScenario) unlockAndGo(1);
   };
 
-  const generatePersona = () => {
+  const generatePersona = async () => {
+    if (personaLoading) return;
     if (!form.role.trim()) {
       showToast("请至少说明你想模拟谁。");
       return;
     }
-    setPersona(buildPersona(scenario, form));
-    goToStep(3);
+    try {
+      setPersonaLoading(true);
+      const result = await createPersona(scenario, form);
+      setPersona(result.persona);
+      setMessages([
+        {
+          id: crypto.randomUUID(),
+          role: "target",
+          text: result.opening_message,
+        },
+      ]);
+      setReport(null);
+      unlockAndGo(3);
+    } catch (error) {
+      console.error(error);
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "AI 画像生成失败，请稍后重试。",
+      );
+    } finally {
+      setPersonaLoading(false);
+    }
   };
 
   const startChat = (draft = "") => {
-    setMessages([
-      {
-        id: crypto.randomUUID(),
-        role: "target",
-        text: firstTargetMessage(scenario),
-      },
-    ]);
-    setScore(68);
+    if (!persona) {
+      showToast("请先生成画像。");
+      return;
+    }
     setRetryDraft(draft);
-    goToStep(4);
+    unlockAndGo(4);
   };
 
-  const sendMessage = (text: string) => {
-    setMessages((current) => [
-      ...current,
-      { id: crypto.randomUUID(), role: "user", text },
-      {
-        id: crypto.randomUUID(),
-        role: "target",
-        text: buildReply(scenario, text),
-      },
-    ]);
-    setScore((current) => scoreMessage(current, text));
+  const sendMessage = async (text: string) => {
+    if (messageLoading || !persona) return;
+
+    const userMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      text,
+    };
+
+    setMessages((current) => [...current, userMessage]);
+
+    try {
+      setMessageLoading(true);
+      const result = await sendSessionMessage(
+        scenario,
+        form,
+        persona,
+        messages,
+        text,
+      );
+      setMessages((current) => [...current, result.targetMessage]);
+      setPersona(result.updatedPersona);
+    } catch (error) {
+      console.error(error);
+      showToast(
+        error instanceof Error ? error.message : "AI 回复失败，请稍后重试。",
+      );
+    } finally {
+      setMessageLoading(false);
+    }
   };
 
-  const finishSimulation = () => {
-    const nextReport = buildReport(
-      scenario,
-      score,
-      messages.some((message) => message.role === "user"),
-    );
-    setReport(nextReport);
-    goToStep(5);
+  const finishSimulation = async () => {
+    if (reportLoading || messageLoading || !persona) return;
+    if (!messages.some((message) => message.role === "user")) {
+      showToast("请至少发送一句话后再生成报告。");
+      return;
+    }
+
+    try {
+      setReportLoading(true);
+      const nextReport = await createSimulationReport(
+        scenario,
+        form,
+        persona,
+        messages,
+      );
+      setReport(nextReport);
+      unlockAndGo(5);
+    } catch (error) {
+      console.error(error);
+      showToast(
+        error instanceof Error ? error.message : "AI 报告生成失败，请稍后重试。",
+      );
+    } finally {
+      setReportLoading(false);
+    }
   };
 
   const copyRewrite = async () => {
+    if (!report) return;
     try {
       await navigator.clipboard.writeText(report.rewrite);
       showToast("已复制优化表达。");
@@ -118,11 +188,18 @@ export function SocialLabApp() {
     }
   };
 
+  const resetChat = () => {
+    const openingMessage = messages.find((message) => message.role === "target");
+    setMessages(openingMessage ? [openingMessage] : []);
+    setRetryDraft("");
+  };
+
   return (
     <div className="app-shell">
       <Sidebar
         currentStep={step}
         isOpen={sidebarOpen}
+        maxUnlockedStep={maxUnlockedStep}
         onStepChange={goToStep}
       />
 
@@ -160,7 +237,7 @@ export function SocialLabApp() {
                 showToast("请至少填写沟通目标。");
                 return;
               }
-              goToStep(2);
+              unlockAndGo(2);
             }}
           />
         )}
@@ -171,27 +248,30 @@ export function SocialLabApp() {
               setForm((current) => ({ ...current, ...patch }))
             }
             onGenerate={generatePersona}
+            isGenerating={personaLoading}
           />
         )}
-        {step === 3 && (
+        {step === 3 && persona && (
           <PersonaScreen
             persona={persona}
             onStart={() => startChat()}
             onTune={() => showToast("画像编辑接口将在下一阶段接入。")}
           />
         )}
-        {step === 4 && (
+        {step === 4 && persona && (
           <ChatScreen
             title={preset.chatTitle}
             persona={persona}
             messages={messages}
             initialDraft={retryDraft}
             onSend={sendMessage}
-            onReset={() => startChat()}
+            onReset={resetChat}
             onFinish={finishSimulation}
+            isSending={messageLoading}
+            isFinishing={reportLoading || messageLoading}
           />
         )}
-        {step === 5 && (
+        {step === 5 && report && (
           <ReportScreen
             report={report}
             onCopy={copyRewrite}
