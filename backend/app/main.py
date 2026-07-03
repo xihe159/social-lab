@@ -110,6 +110,8 @@ def create_app() -> FastAPI:
             "http://localhost:3000",
             "http://127.0.0.1:3000",
             "https://xihe159.github.io",
+            "https://xihe159.github.io/social-lab",
+            "https://social-lab-backend.onrender.com"
         ],
         allow_credentials=True,
         allow_methods=["*"],
