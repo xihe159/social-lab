@@ -21,6 +21,7 @@ from app.schemas.evaluation import EvaluationRequest, EvaluationResponse
 
 router = APIRouter(prefix="/api/session", tags=["evaluation"])
 
+evaluation_agent = EvaluationAgent()
 
 @router.post(
     "/evaluate",
@@ -29,8 +30,7 @@ router = APIRouter(prefix="/api/session", tags=["evaluation"])
 )
 async def evaluate_session(request: EvaluationRequest):
     try:
-        agent = EvaluationAgent()
-        return await agent.run(request)
+        return await evaluation_agent.run(request)
 
     except LLMClientError as exc:
         raise HTTPException(
