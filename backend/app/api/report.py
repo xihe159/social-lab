@@ -7,6 +7,7 @@ from app.schemas.report import ReportRequest, ReportResponse
 
 router = APIRouter(prefix="/api/session", tags=["report"])
 
+coach_agent = CoachAgent()
 
 @router.post("/report", response_model=ReportResponse)
 async def create_report(request: ReportRequest) -> ReportResponse:
@@ -18,8 +19,8 @@ async def create_report(request: ReportRequest) -> ReportResponse:
     """
 
     try:
-        agent = CoachAgent()
-        return await agent.run(request)
+
+        return await coach_agent.run(request)
     except LLMClientError as exc:
         raise HTTPException(
             status_code=502,

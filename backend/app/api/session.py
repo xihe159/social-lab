@@ -1,3 +1,6 @@
+# social-lab/backend/app/api/session.py
+# 2026/07/01
+
 from fastapi import APIRouter, HTTPException
 
 from app.services.session_orchestrator import SessionOrchestrator
