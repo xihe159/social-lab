@@ -7,6 +7,8 @@ from app.schemas.session import SessionMessageRequest, SessionMessageResponse
 
 router = APIRouter(prefix="/api/session", tags=["session"])
 
+orchestrator = SessionOrchestrator()
+
 @router.post("/message", response_model=SessionMessageResponse)
 async def send_message(request: SessionMessageRequest) -> SessionMessageResponse:
     """
@@ -19,8 +21,6 @@ async def send_message(request: SessionMessageRequest) -> SessionMessageResponse
     """
 
     try:
-        
-        orchestrator = SessionOrchestrator()
         return await orchestrator.handle_message(request)
     except LLMClientError as exc:
         raise HTTPException(
