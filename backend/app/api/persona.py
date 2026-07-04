@@ -13,11 +13,12 @@ from app.schemas.safety import SafetyCheckRequest
 
 router = APIRouter(prefix="/api/persona", tags=["persona"])
 
+safety_agent = SafetyAgent()
+persona_agent = PersonaAgent()
 
 @router.post("/create", response_model=PersonaCreateResponse)
 async def create_persona(request: PersonaCreateRequest):
     try:
-        safety_agent = SafetyAgent()
         safety_result = await safety_agent.run(
             SafetyCheckRequest(
                 context="persona_create",
@@ -44,8 +45,7 @@ async def create_persona(request: PersonaCreateRequest):
                 },
             )
 
-        agent = PersonaAgent()
-        return await agent.run(request)
+        return await persona_agent.run(request)
 
     except HTTPException:
         raise
