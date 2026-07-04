@@ -1,7 +1,11 @@
 # social-lab/backend/app/services/session_orchestrator.py
-# 2026/06/30
+# 2026/07/04
 
 from __future__ import annotations
+
+import logging
+import time
+from uuid import uuid4
 
 from app.agents.memory_agent import MemoryAgent
 from app.agents.simulation_agent import SimulationAgent, apply_state_delta
@@ -21,21 +25,24 @@ from app.schemas.session import (
 from app.schemas.state import StateEvaluateRequest
 from app.schemas.safety import SafetyCheckRequest, SafetyCheckResponse
 
+
+logger = logging.getLogger(__name__)
+
 class SessionOrchestrator:
     """
     SessionOrchestrator 负责单轮模拟对话的 Agent 编排。
 
     当前流程：
-    1. SafetyAgent：检查用户输入是否存在隐私、操控、骚扰、威胁等风险
-    2. SimulationAgent：生成目标人物回复
-    3. StateAgent：重新评估关系状态变化
-    4. MemoryAgent：更新当前会话短期记忆
+    1. SafetyAgent：检查用户输入是否存在隐私、操控、骚扰、威胁等风险；
+    2. SimulationAgent：生成目标人物回复；
+    3. StateAgent：重新评估关系状态变化；
+    4. MemoryAgent：更新当前会话短期记忆。
 
     设计原则：
-    - SafetyAgent 高风险 block 时，不继续调用后续 Agent
-    - SimulationAgent 是主流程，失败才让接口失败
-    - StateAgent 是增强模块，失败时回退到 SimulationAgent 的状态变化
-    - MemoryAgent 是增强模块，失败时回退到上一轮 memory
+    - SafetyAgent 高风险 block 时，不继续调用后续 Agent；
+    - SimulationAgent 是主流程，失败才让接口失败；
+    - StateAgent 是增强模块，失败时回退到 SimulationAgent 的状态变化；
+    - MemoryAgent 是增强模块，失败时回退到上一轮 memory。
     """
 
     def __init__(self):
@@ -44,11 +51,147 @@ class SessionOrchestrator:
         self.state_agent = StateAgent()
         self.memory_agent = MemoryAgent()
 
+        logger.info(
+            "session_orchestrator_initialized",
+            extra={
+                "service": "SessionOrchestrator",
+                "agents": [
+                    "SafetyAgent",
+                    "SimulationAgent",
+                    "StateAgent",
+                    "MemoryAgent",
+                ],
+            },
+        )
+
     async def handle_message(
         self,
         request: SessionMessageRequest,
     ) -> SessionMessageResponse:
-        print("[SessionOrchestrator] Start SafetyAgent")
+        """
+        处理一轮用户消息，并返回目标人物回复、状态变化、记忆更新和安全检查结果。
+        """
+        trace_id = uuid4().hex[:8]
+        started_at = time.perf_counter()
+
+        logger.info(
+            "session_message_started",
+            extra={
+                "trace_id": trace_id,
+                "scenario": request.scenario,
+                "message_count": len(request.messages),
+                "has_memory": request.memory is not None,
+                "user_message_length": len(request.user_message),
+                "goal_length": len(request.goal),
+                "outcome_length": len(request.outcome or ""),
+            },
+        )
+
+        safety_result = await self._run_safety_agent(
+            trace_id=trace_id,
+            request=request,
+        )
+
+        if self._should_block(safety_result):
+            logger.warning(
+                "session_message_blocked",
+                extra={
+                    "trace_id": trace_id,
+                    "agent": "SafetyAgent",
+                    "allowed": safety_result.allowed,
+                    "action": safety_result.action,
+                    "risk_level": safety_result.risk_level,
+                    "risk_types": safety_result.risk_types,
+                    "should_redact": safety_result.should_redact,
+                    "redacted_fields": safety_result.redacted_fields,
+                },
+            )
+
+            blocked_response = self._build_blocked_response(
+                request=request,
+                safety_result=safety_result,
+            )
+
+            total_duration_ms = self._elapsed_ms(started_at)
+
+            logger.info(
+                "session_message_finished",
+                extra={
+                    "trace_id": trace_id,
+                    "status": "blocked",
+                    "duration_ms": total_duration_ms,
+                    "scenario": request.scenario,
+                    "final_risk_flags": blocked_response.simulation.risk_flags,
+                    "has_updated_memory": blocked_response.updated_memory is not None,
+                },
+            )
+
+            return blocked_response
+
+        simulation_response = await self._run_simulation_agent(
+            trace_id=trace_id,
+            request=request,
+            safety_result=safety_result,
+        )
+
+        # 先保留 SimulationAgent 的初始状态判断，作为 StateAgent 失败时的兜底。
+        state_delta = simulation_response.simulation.state_delta
+        risk_flags = simulation_response.simulation.risk_flags
+
+        state_delta, risk_flags = await self._run_state_agent_with_fallback(
+            trace_id=trace_id,
+            request=request,
+            simulation_response=simulation_response,
+            fallback_state_delta=state_delta,
+            fallback_risk_flags=risk_flags,
+            safety_result=safety_result,
+        )
+
+        simulation_response.updated_memory = await self._run_memory_agent_with_fallback(
+            trace_id=trace_id,
+            request=request,
+            simulation_response=simulation_response,
+            state_delta=state_delta,
+            risk_flags=risk_flags,
+        )
+
+        total_duration_ms = self._elapsed_ms(started_at)
+
+        logger.info(
+            "session_message_finished",
+            extra={
+                "trace_id": trace_id,
+                "status": "success",
+                "duration_ms": total_duration_ms,
+                "scenario": request.scenario,
+                "final_risk_flags": simulation_response.simulation.risk_flags,
+                "reply_length": len(simulation_response.target_message.content),
+                "has_updated_memory": simulation_response.updated_memory is not None,
+            },
+        )
+
+        return simulation_response
+
+    async def _run_safety_agent(
+        self,
+        *,
+        trace_id: str,
+        request: SessionMessageRequest,
+    ) -> SafetyCheckResponse:
+        agent_started_at = time.perf_counter()
+
+        logger.info(
+            "agent_started",
+            extra={
+                "trace_id": trace_id,
+                "agent": "SafetyAgent",
+                "context": "session_message",
+                "scenario": request.scenario,
+                "message_count": len(request.messages),
+                "has_memory": request.memory is not None,
+                "user_message_length": len(request.user_message),
+            },
+        )
 
         safety_result = await self.safety_agent.run(
             SafetyCheckRequest(
@@ -63,31 +206,99 @@ class SessionOrchestrator:
             )
         )
 
-        print("[SessionOrchestrator] SafetyAgent result:", safety_result.model_dump())
+        logger.info(
+            "agent_finished",
+            extra={
+                "trace_id": trace_id,
+                "agent": "SafetyAgent",
+                "duration_ms": self._elapsed_ms(agent_started_at),
+                "allowed": safety_result.allowed,
+                "action": safety_result.action,
+                "risk_level": safety_result.risk_level,
+                "risk_types": safety_result.risk_types,
+                "should_redact": safety_result.should_redact,
+                "redacted_fields": safety_result.redacted_fields,
+                "has_user_notice": bool(safety_result.user_notice.strip()),
+                "has_safe_rewrite_hint": bool(
+                    safety_result.safe_rewrite_hint.strip()
+                ),
+            },
+        )
 
-        if self._should_block(safety_result):
-            print("[SessionOrchestrator] SafetyAgent blocked this message")
-            return self._build_blocked_response(
-                request=request,
-                safety_result=safety_result,
-            )
+        return safety_result
 
-        print("[SessionOrchestrator] Start SimulationAgent")
+    async def _run_simulation_agent(
+        self,
+        *,
+        trace_id: str,
+        request: SessionMessageRequest,
+        safety_result: SafetyCheckResponse,
+    ) -> SessionMessageResponse:
+        agent_started_at = time.perf_counter()
+
+        logger.info(
+            "agent_started",
+            extra={
+                "trace_id": trace_id,
+                "agent": "SimulationAgent",
+                "scenario": request.scenario,
+                "message_count": len(request.messages),
+                "has_memory": request.memory is not None,
+            },
+        )
 
         simulation_response = await self.simulation_agent.run(request)
+
+        # 把 SafetyAgent 的检查结果合并进主响应。
         simulation_response.safety = safety_result
 
+        # 如果 SafetyAgent 给出 warn/rewrite，合并到 risk_flags 中。
         self._append_safety_warning_if_needed(
             risk_flags=simulation_response.simulation.risk_flags,
             safety_result=safety_result,
         )
 
-        print("[SessionOrchestrator] SimulationAgent success")
-        print("[SessionOrchestrator] Start StateAgent")
+        logger.info(
+            "agent_finished",
+            extra={
+                "trace_id": trace_id,
+                "agent": "SimulationAgent",
+                "duration_ms": self._elapsed_ms(agent_started_at),
+                "reply_length": len(simulation_response.target_message.content),
+                "attitude": simulation_response.simulation.attitude,
+                "emotion": simulation_response.simulation.emotion,
+                "perceived_user_tone": (
+                    simulation_response.simulation.perceived_user_tone
+                ),
+                "state_delta": simulation_response.simulation.state_delta.model_dump(),
+                "risk_flags": simulation_response.simulation.risk_flags,
+                "updated_state": simulation_response.updated_state.model_dump(),
+            },
+        )
 
-        # 先保留 SimulationAgent 的初始状态判断，作为 StateAgent 失败时的兜底。
-        state_delta = simulation_response.simulation.state_delta
-        risk_flags = simulation_response.simulation.risk_flags
+        return simulation_response
+
+    async def _run_state_agent_with_fallback(
+        self,
+        *,
+        trace_id: str,
+        request: SessionMessageRequest,
+        simulation_response: SessionMessageResponse,
+        fallback_state_delta: StateDelta,
+        fallback_risk_flags: list[str],
+        safety_result: SafetyCheckResponse,
+    ) -> tuple[StateDelta, list[str]]:
+        agent_started_at = time.perf_counter()
+
+        logger.info(
+            "agent_started",
+            extra={
+                "trace_id": trace_id,
+                "agent": "StateAgent",
+                "scenario": request.scenario,
+                "fallback": "simulation_agent_state_delta",
+            },
+        )
 
         try:
             state_request = StateEvaluateRequest(
@@ -101,16 +312,12 @@ class SessionOrchestrator:
                 current_state=request.persona.state,
                 simulation_attitude=simulation_response.simulation.attitude,
                 simulation_emotion=simulation_response.simulation.emotion,
-                perceived_user_tone=simulation_response.simulation.perceived_user_tone,
+                perceived_user_tone=(
+                    simulation_response.simulation.perceived_user_tone
+                ),
             )
 
             state_evaluation = await self.state_agent.run(state_request)
-
-            print("[SessionOrchestrator] StateAgent success")
-            print(
-                "[SessionOrchestrator] StateAgent evaluation:",
-                state_evaluation.model_dump(),
-            )
 
             # StateAgent 成功后，用 StateAgent 的结果覆盖 SimulationAgent 的初始判断。
             state_delta = state_evaluation.state_delta
@@ -128,22 +335,68 @@ class SessionOrchestrator:
                 delta=state_delta,
             )
 
-        except LLMClientError as exc:
-            print(
-                "[SessionOrchestrator] StateAgent LLM failed, "
-                "fallback to SimulationAgent result"
+            logger.info(
+                "agent_finished",
+                extra={
+                    "trace_id": trace_id,
+                    "agent": "StateAgent",
+                    "duration_ms": self._elapsed_ms(agent_started_at),
+                    "status": "success",
+                    "state_delta": state_delta.model_dump(),
+                    "risk_flags": risk_flags,
+                    "updated_state": simulation_response.updated_state.model_dump(),
+                },
             )
-            print("[SessionOrchestrator] StateAgent LLM error:", str(exc))
 
-        except Exception as exc:
-            print(
-                "[SessionOrchestrator] StateAgent unexpected failed, "
-                "fallback to SimulationAgent result"
+            return state_delta, risk_flags
+
+        except LLMClientError:
+            logger.exception(
+                "agent_llm_failed_fallback",
+                extra={
+                    "trace_id": trace_id,
+                    "agent": "StateAgent",
+                    "duration_ms": self._elapsed_ms(agent_started_at),
+                    "fallback": "use_simulation_agent_state_delta",
+                },
             )
-            print("[SessionOrchestrator] StateAgent error type:", exc.__class__.__name__)
-            print("[SessionOrchestrator] StateAgent error:", repr(exc))
 
-        print("[SessionOrchestrator] Start MemoryAgent")
+            return fallback_state_delta, fallback_risk_flags
+
+        except Exception:
+            logger.exception(
+                "agent_unexpected_failed_fallback",
+                extra={
+                    "trace_id": trace_id,
+                    "agent": "StateAgent",
+                    "duration_ms": self._elapsed_ms(agent_started_at),
+                    "fallback": "use_simulation_agent_state_delta",
+                },
+            )
+
+            return fallback_state_delta, fallback_risk_flags
+
+    async def _run_memory_agent_with_fallback(
+        self,
+        *,
+        trace_id: str,
+        request: SessionMessageRequest,
+        simulation_response: SessionMessageResponse,
+        state_delta: StateDelta,
+        risk_flags: list[str],
+    ):
+        agent_started_at = time.perf_counter()
+
+        logger.info(
+            "agent_started",
+            extra={
+                "trace_id": trace_id,
+                "agent": "MemoryAgent",
+                "scenario": request.scenario,
+                "has_previous_memory": request.memory is not None,
+                "risk_flag_count": len(risk_flags),
+            },
+        )
 
         try:
             memory_request = MemoryUpdateRequest(
@@ -161,38 +414,69 @@ class SessionOrchestrator:
 
             memory_response = await self.memory_agent.run(memory_request)
 
-            print("[SessionOrchestrator] MemoryAgent success")
-            print(
-                "[SessionOrchestrator] MemoryAgent memory:",
-                memory_response.memory.model_dump(),
-            )
-
-            # 这里使用 getattr，避免 memory_reason / new_facts / next_focus
-            # 在 schema 尚未同步时再次触发 AttributeError。
             memory_reason = getattr(memory_response, "memory_reason", "")
-            if memory_reason:
-                print("[SessionOrchestrator] MemoryAgent reason:", memory_reason)
+            new_facts = getattr(memory_response, "new_facts", [])
+            next_focus = getattr(memory_response, "next_focus", "")
 
-            simulation_response.updated_memory = memory_response.memory
-
-        except LLMClientError as exc:
-            print(
-                "[SessionOrchestrator] MemoryAgent LLM failed, "
-                "fallback to previous memory"
+            logger.info(
+                "agent_finished",
+                extra={
+                    "trace_id": trace_id,
+                    "agent": "MemoryAgent",
+                    "duration_ms": self._elapsed_ms(agent_started_at),
+                    "status": "success",
+                    "has_memory": memory_response.memory is not None,
+                    "conversation_summary_length": len(
+                        memory_response.memory.conversation_summary
+                    ),
+                    "user_strategy_pattern_count": len(
+                        memory_response.memory.user_strategy_pattern
+                    ),
+                    "target_sensitive_point_count": len(
+                        memory_response.memory.target_sensitive_points
+                    ),
+                    "resolved_point_count": len(
+                        memory_response.memory.resolved_points
+                    ),
+                    "unresolved_point_count": len(
+                        memory_response.memory.unresolved_points
+                    ),
+                    "important_event_count": len(
+                        memory_response.memory.important_events
+                    ),
+                    "has_memory_reason": bool(str(memory_reason).strip()),
+                    "new_fact_count": len(new_facts),
+                    "has_next_focus": bool(str(next_focus).strip()),
+                },
             )
-            print("[SessionOrchestrator] MemoryAgent LLM error:", str(exc))
-            simulation_response.updated_memory = request.memory
 
-        except Exception as exc:
-            print(
-                "[SessionOrchestrator] MemoryAgent unexpected failed, "
-                "fallback to previous memory"
+            return memory_response.memory
+
+        except LLMClientError:
+            logger.exception(
+                "agent_llm_failed_fallback",
+                extra={
+                    "trace_id": trace_id,
+                    "agent": "MemoryAgent",
+                    "duration_ms": self._elapsed_ms(agent_started_at),
+                    "fallback": "use_previous_memory",
+                },
             )
-            print("[SessionOrchestrator] MemoryAgent error type:", exc.__class__.__name__)
-            print("[SessionOrchestrator] MemoryAgent error:", repr(exc))
-            simulation_response.updated_memory = request.memory
 
-        return simulation_response
+            return request.memory
+
+        except Exception:
+            logger.exception(
+                "agent_unexpected_failed_fallback",
+                extra={
+                    "trace_id": trace_id,
+                    "agent": "MemoryAgent",
+                    "duration_ms": self._elapsed_ms(agent_started_at),
+                    "fallback": "use_previous_memory",
+                },
+            )
+
+            return request.memory
 
     def _should_block(self, safety_result: SafetyCheckResponse) -> bool:
         return (
@@ -207,11 +491,14 @@ class SessionOrchestrator:
         risk_flags: list[str],
         safety_result: SafetyCheckResponse,
     ) -> None:
-        """将 SafetyAgent 的 warn/rewrite 提醒合并进 risk_flags。"""
+        """
+        将 SafetyAgent 的 warn/rewrite 提醒合并进 risk_flags。
+        """
         if safety_result.action not in ("warn", "rewrite"):
             return
 
         warning = safety_result.user_notice.strip()
+
         if warning and warning not in risk_flags:
             risk_flags.append(warning)
 
@@ -231,6 +518,7 @@ class SessionOrchestrator:
         )
 
         notice = safety_result.user_notice.strip() or "当前输入包含安全风险，已停止继续模拟。"
+
         safe_rewrite_hint = safety_result.safe_rewrite_hint.strip()
         if safe_rewrite_hint:
             notice = f"{notice}\n\n安全改写建议：{safe_rewrite_hint}"
@@ -251,3 +539,7 @@ class SessionOrchestrator:
             updated_memory=request.memory,
             safety=safety_result,
         )
+
+    @staticmethod
+    def _elapsed_ms(started_at: float) -> int:
+        return int((time.perf_counter() - started_at) * 1000)
