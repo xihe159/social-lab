@@ -1,5 +1,5 @@
 # social-lab/backend/app/main.py
-# 2026/07/01
+# 2026/07/04
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ from typing import Optional
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+
+from app.core.logging import configure_logging
 
 from app.api.persona import router as persona_router
 from app.api.session import router as session_router
@@ -98,6 +100,8 @@ async def _call_debug_llm(
 
 
 def create_app() -> FastAPI:
+    configure_logging("INFO")
+
     app = FastAPI(
         title="Social Lab Agent API",
         version="0.2.0",
@@ -109,9 +113,6 @@ def create_app() -> FastAPI:
         allow_origins=[
             "http://localhost:3000",
             "http://127.0.0.1:3000",
-            "https://xihe159.github.io",
-            "https://xihe159.github.io/social-lab",
-            "https://social-lab-backend.onrender.com"
         ],
         allow_credentials=True,
         allow_methods=["*"],

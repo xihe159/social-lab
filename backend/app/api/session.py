@@ -1,16 +1,17 @@
+# social-lab/backend/app/api/session.py
+# 2026/07/01
+
 from fastapi import APIRouter, HTTPException
 
-#G 20260929
 from app.services.session_orchestrator import SessionOrchestrator
-#G 20260929 #
 from app.llm.client import LLMClientError
 from app.schemas.session import SessionMessageRequest, SessionMessageResponse
 
 
 router = APIRouter(prefix="/api/session", tags=["session"])
 
+orchestrator = SessionOrchestrator()
 
-@router.post("/message", response_model=SessionMessageResponse)
 @router.post("/message", response_model=SessionMessageResponse)
 async def send_message(request: SessionMessageRequest) -> SessionMessageResponse:
     """
@@ -23,9 +24,6 @@ async def send_message(request: SessionMessageRequest) -> SessionMessageResponse
     """
 
     try:
-        # G 20260929
-        orchestrator = SessionOrchestrator()
-        # G 20260929
         return await orchestrator.handle_message(request)
     except LLMClientError as exc:
         raise HTTPException(

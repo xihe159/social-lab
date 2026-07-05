@@ -14,12 +14,12 @@ from app.schemas.strategy import StrategyAdviceRequest, StrategyAdviceResponse
 
 router = APIRouter(prefix="/api/session", tags=["strategy"])
 
+strategy_agent = StrategyAgent()
 
 @router.post("/strategy", response_model=StrategyAdviceResponse)
 async def create_strategy(request: StrategyAdviceRequest):
     try:
-        agent = StrategyAgent()
-        return await agent.run(request)
+        return await strategy_agent.run(request)
 
     except LLMClientError as exc:
         raise HTTPException(
