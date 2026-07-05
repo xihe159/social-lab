@@ -6,10 +6,12 @@ import type {
   SimulationReport,
 } from "@/lib/social-lab-types";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_AGENT_API_BASE_URL?.replace(
-  /\/$/,
-  "",
-);
+const DEFAULT_API_BASE_URL = "https://social-lab-backend.onrender.com";
+const API_BASE_URL = (
+  (typeof process !== "undefined"
+    ? process.env.NEXT_PUBLIC_AGENT_API_BASE_URL
+    : undefined) || DEFAULT_API_BASE_URL
+).replace(/\/$/, "");
 
 type BackendChatMessage = {
   role: "user" | "target";
@@ -66,18 +68,26 @@ type ReportResponse = {
 };
 
 async function requestJson<T>(path: string, body?: unknown): Promise<T> {
-  if (!API_BASE_URL) {
-    throw new Error(
-      "缺少 NEXT_PUBLIC_AGENT_API_BASE_URL，请先配置后端 API 地址。",
-    );
-  }
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 90_000);
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: body === undefined ? "GET" : "POST",
-    headers:
-      body === undefined ? undefined : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method: body === undefined ? "GET" : "POST",
+      headers:
+        body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("AI 服务响应超时，请稍后再试。");
+    }
+    throw new Error("无法连接 AI 后端，请确认 Render 服务已启动。");
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
 
   const contentType = response.headers.get("content-type") || "";
   const payload = contentType.includes("application/json")

@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  FileText,
+  Home,
+  IdCard,
+  MessageSquare,
+  Target,
+  UserRound,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { MobileHeader } from "./mobile-header";
 import {
@@ -42,7 +50,7 @@ export function SocialLabApp() {
   const [reportLoading, setReportLoading] = useState(false);
 
   const preset = scenarioPresets[scenario];
-  const progress = useMemo(() => `${((step + 1) / 6) * 100}%`, [step]);
+  const progress = useMemo(() => `${(step / 5) * 100}%`, [step]);
 
   const showToast = (message: string) => {
     setToast(message);
@@ -207,16 +215,16 @@ export function SocialLabApp() {
         <MobileHeader
           currentStep={step}
           onBack={() => goToStep(step - 1)}
-          onMenu={() => setSidebarOpen((open) => !open)}
         />
 
-        <div className="progress-track" aria-hidden="true">
-          <span style={{ width: progress }} />
-        </div>
+        {step > 0 && (
+          <div className="progress-track" aria-hidden="true">
+            <span style={{ width: progress }} />
+          </div>
+        )}
 
         {step === 0 && (
           <LandingScreen
-            onStart={() => goToStep(1)}
             onPresetSelect={(nextScenario) =>
               selectScenario(nextScenario, true)
             }
@@ -226,17 +234,16 @@ export function SocialLabApp() {
           <ScenarioScreen
             scenario={scenario}
             form={form}
-            onScenarioChange={(nextScenario) =>
-              selectScenario(nextScenario)
-            }
             onFormChange={(patch) =>
               setForm((current) => ({ ...current, ...patch }))
             }
-            onContinue={() => {
-              if (!form.goal.trim()) {
+            onContinue={(patch) => {
+              const nextForm = { ...form, ...patch };
+              if (!nextForm.goal.trim()) {
                 showToast("请至少填写沟通目标。");
                 return;
               }
+              setForm(nextForm);
               unlockAndGo(2);
             }}
           />
@@ -280,6 +287,12 @@ export function SocialLabApp() {
         )}
       </main>
 
+      <MobileBottomNav
+        currentStep={step}
+        maxUnlockedStep={maxUnlockedStep}
+        onStepChange={goToStep}
+      />
+
       <div
         className={`toast${toast ? " is-visible" : ""}`}
         role="status"
@@ -288,5 +301,44 @@ export function SocialLabApp() {
         {toast}
       </div>
     </div>
+  );
+}
+
+function MobileBottomNav({
+  currentStep,
+  maxUnlockedStep,
+  onStepChange,
+}: {
+  currentStep: number;
+  maxUnlockedStep: number;
+  onStepChange: (step: number) => void;
+}) {
+  const items = [
+    { label: "首页", icon: Home },
+    { label: "场景", icon: Target },
+    { label: "人物", icon: UserRound },
+    { label: "画像", icon: IdCard },
+    { label: "模拟", icon: MessageSquare },
+    { label: "报告", icon: FileText },
+  ];
+
+  return (
+    <nav className="bottom-nav" aria-label="移动端流程导航">
+      {items.map((item, index) => {
+        const Icon = item.icon;
+        return (
+          <button
+            className={`bottom-nav-item${currentStep === index ? " is-active" : ""}`}
+            disabled={index > maxUnlockedStep}
+            key={item.label}
+            onClick={() => onStepChange(index)}
+            type="button"
+          >
+            <Icon size={20} />
+            <span>{item.label}</span>
+          </button>
+        );
+      })}
+    </nav>
   );
 }
