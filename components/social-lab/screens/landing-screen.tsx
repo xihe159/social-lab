@@ -1,19 +1,32 @@
-import { ArrowRight, Sparkles } from "lucide-react";
+import {
+  ArrowRight,
+  BriefcaseBusiness,
+  GraduationCap,
+  HandHeart,
+  Sparkles,
+  X,
+} from "lucide-react";
+import { useState } from "react";
 import type { CSSProperties } from "react";
 import { scenarioKeys, scenarioPresets } from "@/lib/social-lab-data";
 import type { ScenarioKey } from "@/lib/social-lab-types";
 
 type LandingScreenProps = {
-  onStart: () => void;
   onPresetSelect: (scenario: ScenarioKey) => void;
 };
 
 export function LandingScreen({
-  onStart,
   onPresetSelect,
 }: LandingScreenProps) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const selectFromPicker = (nextScenario: ScenarioKey) => {
+    setPickerOpen(false);
+    onPresetSelect(nextScenario);
+  };
+
   return (
-    <section className="screen is-current">
+    <section className="screen landing-screen is-current">
       <div className="hero-grid">
         <div className="hero-copy">
           <div className="mini-badge">
@@ -29,15 +42,12 @@ export function LandingScreen({
             生成的关系数字分身练习一遍，预判风险，并获得更稳妥的表达方式。
           </p>
           <div className="hero-actions">
-            <button className="primary-action" onClick={onStart} type="button">
-              开始模拟 <ArrowRight size={18} />
-            </button>
             <button
-              className="secondary-action"
-              onClick={() => onPresetSelect("advisor")}
+              className="primary-action"
+              onClick={() => setPickerOpen(true)}
               type="button"
             >
-              载入导师推荐信示例
+              开始模拟 <ArrowRight size={18} />
             </button>
           </div>
         </div>
@@ -76,12 +86,63 @@ export function LandingScreen({
               onClick={() => onPresetSelect(key)}
               type="button"
             >
+              <ScenarioIcon scenario={key} />
               <b>{preset.label}</b>
               <span>{preset.summary}</span>
             </button>
           );
         })}
       </div>
+      {pickerOpen && (
+        <div className="scenario-modal" role="dialog" aria-modal="true">
+          <div
+            className="scenario-modal-backdrop"
+            onClick={() => setPickerOpen(false)}
+          />
+          <div className="scenario-modal-card">
+            <div className="scenario-modal-title">选择你的沟通场景</div>
+            <div className="scenario-modal-grid">
+              {scenarioKeys.map((key) => {
+                const preset = scenarioPresets[key];
+                return (
+                  <button
+                    className="scenario-modal-option"
+                    key={key}
+                    onClick={() => selectFromPicker(key)}
+                    type="button"
+                  >
+                    <ScenarioIcon scenario={key} />
+                    <b>{preset.label.replace("沟通", "")}</b>
+                    <span>{preset.summary}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p>后续问题会根据你的选择自动调整</p>
+          </div>
+          <button
+            className="scenario-modal-close"
+            onClick={() => setPickerOpen(false)}
+            aria-label="关闭场景选择"
+            type="button"
+          >
+            <X size={24} />
+          </button>
+        </div>
+      )}
     </section>
   );
+}
+
+function ScenarioIcon({ scenario }: { scenario: ScenarioKey }) {
+  const icon =
+    scenario === "advisor" ? (
+      <GraduationCap size={24} />
+    ) : scenario === "work" ? (
+      <BriefcaseBusiness size={24} />
+    ) : (
+      <HandHeart size={24} />
+    );
+
+  return <span className={`scenario-icon is-${scenario}`}>{icon}</span>;
 }

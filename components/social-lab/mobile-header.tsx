@@ -1,34 +1,22 @@
-import { ArrowLeft, Menu } from "lucide-react";
+import { ArrowLeft, BrainCircuit } from "lucide-react";
 import { stepLabels } from "@/lib/social-lab-data";
 
 type MobileHeaderProps = {
   currentStep: number;
   onBack: () => void;
-  onMenu: () => void;
 };
 
 export function MobileHeader({
   currentStep,
   onBack,
-  onMenu,
 }: MobileHeaderProps) {
+  const stepText =
+    currentStep === 0
+      ? "先演练，再开口"
+      : `Step ${currentStep} / 5 · ${stepLabels[currentStep]}`;
+
   return (
     <header className="mobile-header">
-      <button
-        className="icon-button"
-        onClick={onMenu}
-        aria-label="打开流程"
-        title="打开流程"
-        type="button"
-      >
-        <Menu size={20} />
-      </button>
-      <div>
-        <strong>Social Lab</strong>
-        <span>
-          Step {currentStep + 1} / 6 - {stepLabels[currentStep]}
-        </span>
-      </div>
       <button
         className="icon-button"
         onClick={onBack}
@@ -37,6 +25,18 @@ export function MobileHeader({
         type="button"
       >
         <ArrowLeft size={20} />
+      </button>
+      <div>
+        <strong>Social Lab</strong>
+        <span>{stepText}</span>
+      </div>
+      <button
+        className="icon-button"
+        aria-label="AI 模拟"
+        title="AI 模拟"
+        type="button"
+      >
+        <BrainCircuit size={20} />
       </button>
     </header>
   );
