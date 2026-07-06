@@ -3,10 +3,9 @@
 import {
   FileText,
   Home,
-  IdCard,
+  Lock,
   MessageSquare,
   Target,
-  UserRound,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { MobileHeader } from "./mobile-header";
@@ -60,7 +59,13 @@ export function SocialLabApp() {
   const goToStep = (nextStep: number) => {
     const safeStep = Math.max(0, Math.min(5, nextStep));
     if (safeStep > maxUnlockedStep) {
-      showToast("请先完成前面的步骤。");
+      const currentLabel =
+        maxUnlockedStep < 2
+          ? "场景信息"
+          : maxUnlockedStep < 4
+            ? "人物信息"
+            : "当前步骤";
+      showToast(`请先完成「${currentLabel}」，即可进入下一步。`);
       setSidebarOpen(false);
       return;
     }
@@ -256,6 +261,7 @@ export function SocialLabApp() {
             }
             onGenerate={generatePersona}
             isGenerating={personaLoading}
+            canGenerate={Boolean(form.role.trim())}
           />
         )}
         {step === 3 && persona && (
@@ -314,27 +320,26 @@ function MobileBottomNav({
   onStepChange: (step: number) => void;
 }) {
   const items = [
-    { label: "首页", icon: Home },
-    { label: "场景", icon: Target },
-    { label: "人物", icon: UserRound },
-    { label: "画像", icon: IdCard },
-    { label: "模拟", icon: MessageSquare },
-    { label: "报告", icon: FileText },
+    { label: "首页", icon: Home, step: 0 },
+    { label: "场景", icon: Target, step: 1 },
+    { label: "模拟", icon: MessageSquare, step: 4 },
+    { label: "报告", icon: FileText, step: 5 },
   ];
 
   return (
     <nav className="bottom-nav" aria-label="移动端流程导航">
       {items.map((item, index) => {
         const Icon = item.icon;
+        const targetStep = item.step;
+        const locked = targetStep > maxUnlockedStep;
         return (
           <button
-            className={`bottom-nav-item${currentStep === index ? " is-active" : ""}`}
-            disabled={index > maxUnlockedStep}
+            className={`bottom-nav-item${currentStep === targetStep ? " is-active" : ""}${locked ? " is-locked" : ""}`}
             key={item.label}
-            onClick={() => onStepChange(index)}
+            onClick={() => onStepChange(targetStep)}
             type="button"
           >
-            <Icon size={20} />
+            {locked ? <Lock size={18} /> : <Icon size={20} />}
             <span>{item.label}</span>
           </button>
         );

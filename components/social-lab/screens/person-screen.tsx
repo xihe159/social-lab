@@ -1,4 +1,4 @@
-import { RefreshCw } from "lucide-react";
+import { ArrowRight, LoaderCircle } from "lucide-react";
 import type { FormData } from "@/lib/social-lab-types";
 
 type PersonScreenProps = {
@@ -6,6 +6,7 @@ type PersonScreenProps = {
   onFormChange: (patch: Partial<FormData>) => void;
   onGenerate: () => void;
   isGenerating: boolean;
+  canGenerate: boolean;
 };
 
 export function PersonScreen({
@@ -13,20 +14,29 @@ export function PersonScreen({
   onFormChange,
   onGenerate,
   isGenerating,
+  canGenerate,
 }: PersonScreenProps) {
+  const buttonLabel = isGenerating
+    ? "正在生成画像..."
+    : canGenerate
+      ? "生成沟通对象"
+      : "请先完成必填信息";
+
   return (
-    <section className="screen is-current">
+    <section className="screen person-screen is-current">
       <div className="screen-heading">
-        <span>Step 2 / 5 - 人物</span>
-        <h2>你想模拟谁？</h2>
+        <span>第 2 步，共 5 步</span>
+        <h2>人物信息</h2>
+        <p>补充对方的信息，让模拟更像真实沟通对象。</p>
       </div>
 
       <div className="form-stack two-column">
         <label>
-          <span>身份</span>
+          <span>这个人是谁？</span>
           <input
             value={form.role}
             onChange={(event) => onFormChange({ role: event.target.value })}
+            placeholder="例如：直属领导 / 同事 / HR"
           />
         </label>
         <label>
@@ -34,6 +44,7 @@ export function PersonScreen({
           <input
             value={form.relation}
             onChange={(event) => onFormChange({ relation: event.target.value })}
+            placeholder="例如：合作顺畅，但平时联系不多"
           />
         </label>
         <label>
@@ -41,6 +52,7 @@ export function PersonScreen({
           <textarea
             value={form.habit}
             onChange={(event) => onFormChange({ habit: event.target.value })}
+            placeholder="例如：回复慢，比较严谨，喜欢有逻辑和证据"
           />
         </label>
         <label>
@@ -54,22 +66,25 @@ export function PersonScreen({
       </div>
 
       <div className="inline-warning">
-        <strong>请先去除敏感信息</strong>
         <p>
-          Social Lab
-          不会自动联系真实人物，也不承诺完全还原对方。这里生成的是一次沟通模拟参数。
+          隐私提示：请先删除姓名、电话、地址等敏感信息。Social Lab
+          只会生成一次模拟参数，不会联系真实人物。
         </p>
       </div>
 
       <div className="footer-actions">
         <button
           className="primary-action"
-          disabled={isGenerating}
+          disabled={!canGenerate || isGenerating}
           onClick={onGenerate}
           type="button"
         >
-          {isGenerating ? "正在生成画像..." : "生成画像"}{" "}
-          <RefreshCw size={18} />
+          {buttonLabel}{" "}
+          {isGenerating ? (
+            <LoaderCircle className="spin-icon" size={18} />
+          ) : (
+            <ArrowRight size={18} />
+          )}
         </button>
       </div>
     </section>

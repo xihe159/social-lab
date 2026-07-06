@@ -15,6 +15,21 @@ type LandingScreenProps = {
   onPresetSelect: (scenario: ScenarioKey) => void;
 };
 
+const compactScenarioCopy: Record<ScenarioKey, { label: string; summary: string }> = {
+  advisor: {
+    label: "导师",
+    summary: "推荐信 / 催回复",
+  },
+  work: {
+    label: "职场",
+    summary: "加薪 / 汇报",
+  },
+  social: {
+    label: "社交",
+    summary: "道歉 / 拒绝",
+  },
+};
+
 export function LandingScreen({
   onPresetSelect,
 }: LandingScreenProps) {
@@ -78,7 +93,7 @@ export function LandingScreen({
       </div>
       <div className="scenario-grid compact">
         {scenarioKeys.map((key) => {
-          const preset = scenarioPresets[key];
+          const preset = compactScenarioCopy[key];
           return (
             <button
               className="scenario-card"
@@ -104,6 +119,7 @@ export function LandingScreen({
             <div className="scenario-modal-grid">
               {scenarioKeys.map((key) => {
                 const preset = scenarioPresets[key];
+                const compactPreset = compactScenarioCopy[key];
                 return (
                   <button
                     className="scenario-modal-option"
@@ -112,7 +128,7 @@ export function LandingScreen({
                     type="button"
                   >
                     <ScenarioIcon scenario={key} />
-                    <b>{preset.label.replace("沟通", "")}</b>
+                    <b>{compactPreset.label}</b>
                     <span>{preset.summary}</span>
                   </button>
                 );
