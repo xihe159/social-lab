@@ -1173,6 +1173,9 @@ textarea:focus {
     height: 7px;
     margin: 0 0 28px;
     background: #e2ded6;
+    position: sticky;
+    top: 66px;
+    z-index: 19;
   }
 
   .progress-track span {
@@ -1351,6 +1354,11 @@ textarea:focus {
     min-height: 98px;
   }
 
+  .person-screen input,
+  .person-screen textarea {
+    font-size: 14px;
+  }
+
   .inline-warning {
     margin-top: 14px;
     padding: 10px 12px;
@@ -1443,4 +1451,64 @@ textarea:focus {
     grid-template-columns: 58px 1fr 42px;
     gap: 8px;
   }
+}
+
+.hero-copy,
+.lab-preview,
+.card-block,
+.score-card,
+.inline-warning,
+.strategy-box,
+.scenario-card,
+.choice-card,
+.question-card,
+.scenario-modal-card,
+.scenario-modal-option,
+.trait-grid div,
+.state-row,
+.yellow-note,
+.rewrite-card {
+  border-radius: 4px;
+}
+
+.person-screen .inline-warning {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0 2px;
+}
+
+.person-screen .inline-warning p {
+  color: #8b8d98;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.persona-screen .screen-heading h2 {
+  font-size: 36px;
+}
+
+.persona-screen .screen-heading p {
+  font-size: 18px;
+  line-height: 1.65;
+}
+
+.persona-screen .meter span {
+  background: #738b66;
+}
+
+.persona-screen .strategy-box {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.persona-screen .strategy-box b {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.persona-screen .strategy-box p {
+  margin-bottom: 0;
 }

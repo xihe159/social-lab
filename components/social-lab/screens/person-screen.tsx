@@ -67,7 +67,7 @@ export function PersonScreen({
 
       <div className="inline-warning">
         <p>
-          隐私提示：请先删除姓名、电话、地址等敏感信息。Social Lab
+          * 隐私提示：请先删除姓名、电话、地址等敏感信息。Social Lab
           只会生成一次模拟参数，不会联系真实人物。
         </p>
       </div>

@@ -15,7 +15,7 @@ export function PersonaScreen({
   onTune,
 }: PersonaScreenProps) {
   return (
-    <section className="screen is-current">
+    <section className="screen persona-screen is-current">
       <div className="screen-heading">
         <span>Step 3 / 5 - 画像</span>
         <h2>{persona.title}</h2>
