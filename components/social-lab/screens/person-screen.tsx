@@ -25,7 +25,6 @@ export function PersonScreen({
   return (
     <section className="screen person-screen is-current">
       <div className="screen-heading">
-        <span>第 2 步，共 5 步</span>
         <h2>人物信息</h2>
         <p>补充对方的信息，让模拟更像真实沟通对象。</p>
       </div>

@@ -209,13 +209,17 @@ export function ScenarioScreen({
   return (
     <section className="screen scenario-screen is-current">
       <div className="screen-heading">
-        <span>Step 1 / 5 - 场景</span>
         <h2>{copy.title}</h2>
         <p>{copy.subtitle}</p>
       </div>
 
       <div className="question-stack">
-        <QuestionCard number={1} title={copy.taskQuestion} hint="单选 + 自定义 · 可跳过">
+        <QuestionCard
+          number={1}
+          title={copy.taskQuestion}
+          hint="单选 + 自定义 · 可跳过"
+          isComplete={Boolean(draft.task.trim())}
+        >
           <ChipGroup
             options={copy.taskOptions}
             selected={[draft.task]}
@@ -232,7 +236,12 @@ export function ScenarioScreen({
           />
         </QuestionCard>
 
-        <QuestionCard number={2} title={copy.urgencyQuestion} hint={copy.urgencyHint}>
+        <QuestionCard
+          number={2}
+          title={copy.urgencyQuestion}
+          hint={copy.urgencyHint}
+          isComplete={Boolean(draft.urgency)}
+        >
           <ChipGroup
             options={copy.urgencyOptions}
             selected={[draft.urgency]}
@@ -244,6 +253,7 @@ export function ScenarioScreen({
           number={3}
           title={copy.outcomeQuestion}
           hint="文本输入，可选 · 可跳过"
+          isComplete={Boolean(draft.outcome.trim())}
         >
           <textarea
             value={draft.outcome}
@@ -261,6 +271,7 @@ export function ScenarioScreen({
           number={4}
           title={copy.concernQuestion}
           hint="多选 + 可自定义 · 可跳过"
+          isComplete={draft.concerns.length > 0 || Boolean(draft.concernNote.trim())}
         >
           <ChipGroup
             options={copy.concernOptions}
@@ -297,15 +308,17 @@ function QuestionCard({
   number,
   title,
   hint,
+  isComplete,
   children,
 }: {
   number: number;
   title: string;
   hint: string;
+  isComplete: boolean;
   children: ReactNode;
 }) {
   return (
-    <article className="question-card">
+    <article className={`question-card${isComplete ? " is-complete" : ""}`}>
       <div className="question-card-title">
         <span>{number}</span>
         <div>

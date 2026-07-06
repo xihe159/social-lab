@@ -17,7 +17,6 @@ export function PersonaScreen({
   return (
     <section className="screen persona-screen is-current">
       <div className="screen-heading">
-        <span>Step 3 / 5 - 画像</span>
         <h2>{persona.title}</h2>
         <p>AI 根据你的描述生成，用于本次模拟，不代表事实判断。</p>
       </div>

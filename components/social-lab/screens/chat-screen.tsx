@@ -50,7 +50,6 @@ export function ChatScreen({
     <section className="screen chat-screen is-current">
       <div className="chat-top">
         <div>
-          <span>Step 4 / 5 - 模拟</span>
           <h2>{title}</h2>
           <p>当前态度：谨慎</p>
         </div>

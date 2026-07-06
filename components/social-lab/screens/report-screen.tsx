@@ -16,7 +16,6 @@ export function ReportScreen({
   return (
     <section className="screen report-screen is-current">
       <div className="screen-heading">
-        <span>Step 5 / 5 - 报告</span>
         <h2>本轮复盘报告</h2>
       </div>
 
