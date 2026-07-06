@@ -1305,7 +1305,10 @@ textarea:focus {
     width: 42px;
     height: 42px;
     border-radius: 14px;
-    transform: translate(8px, 8px);
+  }
+
+  .landing-screen .scenario-icon svg {
+    transform: translate(7px, 7px);
   }
 
   .screen-heading {
