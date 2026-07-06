@@ -1078,20 +1078,25 @@ textarea:focus {
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 24px;
-  transform: translate(-50%, 20px);
+  top: 50%;
+  z-index: 80;
+  width: min(320px, calc(100vw - 48px));
+  transform: translate(-50%, calc(-50% + 12px));
   opacity: 0;
   pointer-events: none;
   background: var(--ink);
   color: #fff;
-  border-radius: 8px;
-  padding: 12px 16px;
+  border-radius: 16px;
+  padding: 14px 18px;
+  text-align: center;
+  line-height: 1.55;
+  box-shadow: 0 18px 42px rgba(20, 26, 38, 0.28);
   transition: 180ms ease;
 }
 
 .toast.is-visible {
   opacity: 1;
-  transform: translate(-50%, 0);
+  transform: translate(-50%, -50%);
 }
 
 @media (max-width: 900px) {
@@ -1300,7 +1305,7 @@ textarea:focus {
     width: 42px;
     height: 42px;
     border-radius: 14px;
-    transform: translate(3px, 3px);
+    transform: translate(8px, 8px);
   }
 
   .screen-heading {
