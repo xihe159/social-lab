@@ -40,6 +40,7 @@ class SimulationAgent:
             system_prompt=SIMULATION_SYSTEM_PROMPT,
             user_prompt=build_simulation_user_prompt(payload),
             output_model=SimulationReply,
+            temperature=0.55,
         )
 
         return self.post_process(simulation=simulation, request=request)
