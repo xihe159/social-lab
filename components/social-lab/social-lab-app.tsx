@@ -102,13 +102,9 @@ export function SocialLabApp() {
       setPersonaLoading(true);
       const result = await createPersona(scenario, form);
       setPersona(result.persona);
-      setMessages([
-        {
-          id: crypto.randomUUID(),
-          role: "target",
-          text: result.opening_message,
-        },
-      ]);
+      // 不让 AI 目标人物先开口
+      // 用户应该先输入自己想说的话
+      setMessages([]);
       setReport(null);
       unlockAndGo(3);
     } catch (error) {
@@ -202,10 +198,9 @@ export function SocialLabApp() {
   };
 
   const resetChat = () => {
-    const openingMessage = messages.find((message) => message.role === "target");
-    setMessages(openingMessage ? [openingMessage] : []);
+    setMessages([]);
     setRetryDraft("");
-  };
+   };
 
   return (
     <div className="app-shell">
