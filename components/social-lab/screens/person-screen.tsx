@@ -19,27 +19,27 @@ export function PersonScreen({
   const buttonLabel = isGenerating
     ? "正在生成画像..."
     : canGenerate
-      ? "生成沟通对象"
-      : "请先完成必填信息";
+      ? "生成 AI 扮演对象"
+      : "请先填写对方身份";
 
   return (
     <section className="screen person-screen is-current">
       <div className="screen-heading">
-        <h2>人物信息</h2>
-        <p>补充对方的信息，让模拟更像真实沟通对象。</p>
+        <h2>你希望 AI 扮演谁？</h2>
+        <p>请补充对方的信息。你将在后续对话中扮演自己，AI 会扮演这个沟通对象。</p>
       </div>
 
       <div className="form-stack two-column">
         <label>
-          <span>这个人是谁？</span>
+          <span>你想让 AI 扮演谁？</span>
           <input
             value={form.role}
             onChange={(event) => onFormChange({ role: event.target.value })}
-            placeholder="例如：直属领导 / 同事 / HR"
+            placeholder="例如：导师 / 直属领导 / 同事 / 朋友 / 伴侣 / 客户"
           />
         </label>
         <label>
-          <span>你们现在是什么关系？</span>
+          <span>你和对方现在是什么关系？</span>
           <input
             value={form.relation}
             onChange={(event) => onFormChange({ relation: event.target.value })}
@@ -47,7 +47,7 @@ export function PersonScreen({
           />
         </label>
         <label>
-          <span>他/她平时怎么沟通？</span>
+          <span>对方平时沟通习惯</span>
           <textarea
             value={form.habit}
             onChange={(event) => onFormChange({ habit: event.target.value })}

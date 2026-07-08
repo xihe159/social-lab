@@ -18,7 +18,7 @@ export function PersonaScreen({
     <section className="screen persona-screen is-current">
       <div className="screen-heading">
         <h2>{persona.title}</h2>
-        <p>AI 根据你的描述生成，用于本次模拟，不代表事实判断。</p>
+        <p>AI 将根据这个画像扮演对方。你在下一步中扮演自己，主动输入你想说的话。</p>
       </div>
 
       <div className="dashboard-grid">
