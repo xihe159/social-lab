@@ -12,6 +12,9 @@ https://xihe159.github.io/social-lab/
 ## Current Features
 
 - Responsive desktop and mobile web experience
+- Supabase Email Magic Link login with optional anonymous trial
+- Saved personas, sessions, messages, and reports for logged-in users
+- History, persona library, and profile pages
 - Advisor, workplace, and social communication scenarios
 - Goal, expected outcome, target-person profile, relationship, habit, and chat-log input
 - AI-generated Persona Card and Relationship State
@@ -24,13 +27,11 @@ https://xihe159.github.io/social-lab/
 ```text
 GitHub Pages static frontend
         |
-        | NEXT_PUBLIC_AGENT_API_BASE_URL
+        | NEXT_PUBLIC_AGENT_API_BASE_URL / Supabase Auth
         v
 Render FastAPI backend
         |
-        | LLM_API_KEY / LLM_BASE_URL / LLM_MODEL_ID
-        v
-OpenAI-compatible LLM provider
+        | LLM provider + Supabase PostgreSQL
 ```
 
 The frontend is a static Next.js export. GitHub Pages cannot run server code, so the Python backend must be deployed on Render or another web service.
@@ -79,6 +80,8 @@ Create `.env.local` in the project root:
 
 ```env
 NEXT_PUBLIC_AGENT_API_BASE_URL=https://social-lab-backend.onrender.com
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
 If you are running the backend locally, use `http://127.0.0.1:8000` instead.
@@ -117,6 +120,16 @@ Create `backend/.env`:
 LLM_API_KEY=your_api_key
 LLM_BASE_URL=https://your-openai-compatible-base-url
 LLM_MODEL_ID=your_model_id
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_SERVICE_KEY=your_supabase_service_role_key
+```
+
+Before enabling V1.5 persistence, run `backend/supabase_schema.sql` in the
+Supabase SQL editor. In Supabase Auth settings, add these redirect URLs:
+
+```text
+http://localhost:3000/social-lab/auth/callback/
+https://xihe159.github.io/social-lab/auth/callback/
 ```
 
 Start the backend:
@@ -136,6 +149,9 @@ Main backend APIs:
 - `POST /api/persona/create`
 - `POST /api/session/message`
 - `POST /api/session/report`
+- `GET /api/me`
+- `GET /api/personas`
+- `GET /api/sessions`
 - `GET /health`
 
 ## Deploy Frontend To GitHub Pages
@@ -146,6 +162,8 @@ Before deploying, add this GitHub repository variable:
 
 ```text
 NEXT_PUBLIC_AGENT_API_BASE_URL=https://social-lab-backend.onrender.com
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
 Then enable GitHub Pages:
@@ -177,6 +195,8 @@ Add Render environment variables:
 LLM_API_KEY
 LLM_BASE_URL
 LLM_MODEL_ID
+SUPABASE_URL
+SUPABASE_SERVICE_KEY
 ```
 
 After deployment, copy the Render service URL and set it as the GitHub repository variable `NEXT_PUBLIC_AGENT_API_BASE_URL`.
@@ -185,6 +205,12 @@ Backend API docs:
 
 ```text
 https://social-lab-backend.onrender.com/docs
+```
+
+Supabase backend connection check:
+
+```text
+https://social-lab-backend.onrender.com/api/debug/supabase
 ```
 
 ## Privacy Note

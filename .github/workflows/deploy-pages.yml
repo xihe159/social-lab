@@ -35,6 +35,8 @@ jobs:
         run: npm run build
         env:
           NEXT_PUBLIC_AGENT_API_BASE_URL: ${{ vars.NEXT_PUBLIC_AGENT_API_BASE_URL || 'https://social-lab-backend.onrender.com' }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

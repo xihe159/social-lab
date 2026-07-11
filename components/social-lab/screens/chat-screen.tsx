@@ -65,6 +65,13 @@ export function ChatScreen({
 
       <div className="state-chip">对方目前关注：{persona.focus}</div>
 
+      {isSending && (
+        <div className="typing-status" role="status" aria-live="polite">
+          <span />
+          对方正在输入中
+        </div>
+      )}
+
       <div className="chat-window" ref={chatWindowRef} aria-live="polite">
         {messages.map((message) => (
           <p className={`bubble ${message.role}`} key={message.id}>

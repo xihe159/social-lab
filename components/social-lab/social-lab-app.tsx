@@ -8,7 +8,9 @@ import {
   Target,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { appPath } from "@/lib/app-path";
 import { MobileHeader } from "./mobile-header";
+import { useAuth } from "./auth-provider";
 import {
   createPersona,
   createSimulationReport,
@@ -32,6 +34,7 @@ import type {
 } from "@/lib/social-lab-types";
 
 export function SocialLabApp() {
+  const { accessToken, user } = useAuth();
   const [step, setStep] = useState(0);
   const [scenario, setScenario] = useState<ScenarioKey>("advisor");
   const [form, setForm] = useState<FormData>(() =>
@@ -40,6 +43,8 @@ export function SocialLabApp() {
   const [persona, setPersona] = useState<Persona | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [report, setReport] = useState<SimulationReport | null>(null);
+  const [personaId, setPersonaId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [retryDraft, setRetryDraft] = useState("");
@@ -50,10 +55,18 @@ export function SocialLabApp() {
 
   const preset = scenarioPresets[scenario];
   const progress = useMemo(() => `${(step / 5) * 100}%`, [step]);
+  const accountLabel = useMemo(() => {
+    const email = user?.email ?? "";
+    return email.slice(0, 1).toUpperCase() || "我";
+  }, [user]);
 
   const showToast = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 1800);
+  };
+
+  const goToAccount = () => {
+    window.location.href = user ? appPath("/profile/") : appPath("/login/");
   };
 
   const goToStep = (nextStep: number) => {
@@ -87,6 +100,8 @@ export function SocialLabApp() {
     setPersona(null);
     setMessages([]);
     setReport(null);
+    setPersonaId(null);
+    setSessionId(null);
     setRetryDraft("");
     setMaxUnlockedStep(1);
     if (openScenario) unlockAndGo(1);
@@ -100,13 +115,18 @@ export function SocialLabApp() {
     }
     try {
       setPersonaLoading(true);
-      const result = await createPersona(scenario, form);
+      const result = await createPersona(scenario, form, { accessToken });
       setPersona(result.persona);
+      setPersonaId(result.persona_id ?? null);
+      setSessionId(null);
       // 不让 AI 目标人物先开口
       // 用户应该先输入自己想说的话
       setMessages([]);
       setReport(null);
       unlockAndGo(3);
+      if (result.saved) {
+        showToast("画像已保存到你的人物库。");
+      }
     } catch (error) {
       console.error(error);
       showToast(
@@ -147,9 +167,15 @@ export function SocialLabApp() {
         persona,
         messages,
         text,
+        {
+          accessToken,
+          personaId,
+          sessionId,
+        },
       );
       setMessages((current) => [...current, result.targetMessage]);
       setPersona(result.updatedPersona);
+      if (result.sessionId) setSessionId(result.sessionId);
     } catch (error) {
       console.error(error);
       showToast(
@@ -174,8 +200,25 @@ export function SocialLabApp() {
         form,
         persona,
         messages,
+        {
+          accessToken,
+          personaId,
+          sessionId,
+        },
       );
       setReport(nextReport);
+      if (!accessToken) {
+        window.localStorage.setItem(
+          "social_lab_guest_run",
+          JSON.stringify({
+            scenario,
+            form,
+            persona,
+            messages,
+            report: nextReport,
+          }),
+        );
+      }
       unlockAndGo(5);
     } catch (error) {
       console.error(error);
@@ -215,6 +258,9 @@ export function SocialLabApp() {
         <MobileHeader
           currentStep={step}
           onBack={() => goToStep(step - 1)}
+          onAccountClick={goToAccount}
+          accountLabel={accountLabel}
+          isSignedIn={Boolean(user)}
         />
 
         {step > 0 && (
@@ -284,6 +330,14 @@ export function SocialLabApp() {
             report={report}
             onCopy={copyRewrite}
             onRetry={() => startChat(report.rewrite)}
+            isSignedIn={Boolean(user)}
+            onLoginToSave={() => {
+              window.localStorage.setItem(
+                "social_lab_post_login_path",
+                appPath("/"),
+              );
+              goToAccount();
+            }}
           />
         )}
       </main>

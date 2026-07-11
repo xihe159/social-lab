@@ -66,6 +66,8 @@ class SessionMessageRequest(BaseModel):
     persona: Persona
     messages: List[ChatMessage] = Field(default_factory=list, description="已有对话历史")
     user_message: str = Field(description="用户最新输入的消息")
+    persona_id: Optional[str] = Field(default=None, description="已保存 Persona ID")
+    session_id: Optional[str] = Field(default=None, description="已保存 Session ID")
     memory: Optional[SessionMemory] = Field(
         default=None,
         description="当前会话短期记忆；首次对话可以为空",
@@ -122,5 +124,7 @@ class SessionMessageResponse(BaseModel):
         default=None,
         description="本轮安全检查结果；无风险或未执行时可以为空",
     )
+    session_id: Optional[str] = None
+    saved: bool = False
 
 
