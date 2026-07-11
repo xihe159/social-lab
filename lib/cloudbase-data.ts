@@ -82,14 +82,17 @@ export async function createSessionInCloudBase({
 }
 
 export async function saveMessageToCloudBase({
+  user,
   sessionId,
   message,
 }: {
+  user: CloudBaseUser;
   sessionId: string;
   message: ChatMessage;
 }) {
   const db = await ensureDb();
   await db.collection(COLLECTIONS.messages).add({
+    owner_id: ownerId(user),
     session_id: sessionId,
     role: message.role,
     content: message.text,
@@ -98,14 +101,17 @@ export async function saveMessageToCloudBase({
 }
 
 export async function saveRelationshipStateToCloudBase({
+  user,
   sessionId,
   state,
 }: {
+  user: CloudBaseUser;
   sessionId: string;
   state: Persona["state"];
 }) {
   const db = await ensureDb();
   await db.collection(COLLECTIONS.relationshipStates).doc(sessionId).set({
+    owner_id: ownerId(user),
     session_id: sessionId,
     ...state,
     updated_at: now(),
@@ -113,14 +119,17 @@ export async function saveRelationshipStateToCloudBase({
 }
 
 export async function saveReportToCloudBase({
+  user,
   sessionId,
   report,
 }: {
+  user: CloudBaseUser;
   sessionId: string;
   report: SimulationReport;
 }) {
   const db = await ensureDb();
   const response = await db.collection(COLLECTIONS.reports).add({
+    owner_id: ownerId(user),
     session_id: sessionId,
     report_json: report,
     created_at: now(),
@@ -198,15 +207,24 @@ export async function getCloudBaseReport(reportId: string) {
   return { id: item._id || item.id, report: item.report_json as Record<string, unknown> };
 }
 
-export async function deleteCloudBaseSession(sessionId: string) {
+export async function deleteCloudBaseSession(user: CloudBaseUser, sessionId: string) {
   const db = await ensureDb();
-  await db.collection(COLLECTIONS.messages).where({ session_id: sessionId }).remove();
-  await db.collection(COLLECTIONS.reports).where({ session_id: sessionId }).remove();
+  await db
+    .collection(COLLECTIONS.messages)
+    .where({ owner_id: ownerId(user), session_id: sessionId })
+    .remove();
+  await db
+    .collection(COLLECTIONS.reports)
+    .where({ owner_id: ownerId(user), session_id: sessionId })
+    .remove();
   await db.collection(COLLECTIONS.relationshipStates).doc(sessionId).remove();
   await db.collection(COLLECTIONS.sessions).doc(sessionId).remove();
 }
 
-export async function deleteCloudBasePersona(personaId: string) {
+export async function deleteCloudBasePersona(user: CloudBaseUser, personaId: string) {
   const db = await ensureDb();
-  await db.collection(COLLECTIONS.personas).doc(personaId).remove();
+  await db
+    .collection(COLLECTIONS.personas)
+    .where({ owner_id: ownerId(user), _id: personaId })
+    .remove();
 }
