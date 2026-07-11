@@ -4,29 +4,19 @@ import { ArrowLeft, FileText, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { appPath } from "@/lib/app-path";
 import {
-  deleteCloudBaseSession,
-  getCloudBaseReport,
-  listCloudBaseSessions,
-} from "@/lib/cloudbase-data";
-import {
+  deleteSavedSession,
+  getSavedReport,
+  listSavedSessions,
   type SavedSessionRecord,
 } from "@/lib/social-lab-api";
-import { useAuth } from "@/components/social-lab/auth-provider";
 
 export default function HistoryPage() {
-  const { user, isLoading } = useAuth();
   const [records, setRecords] = useState<SavedSessionRecord[]>([]);
-  const [report, setReport] = useState<Record<string, unknown> | null>(null);
+  const [reportPreview, setReportPreview] = useState("");
   const [message, setMessage] = useState("正在加载...");
 
   useEffect(() => {
-    if (isLoading) return;
-    if (!user) {
-      setMessage("登录后可以查看历史模拟。");
-      return;
-    }
-
-    listCloudBaseSessions(user)
+    listSavedSessions()
       .then((items) => {
         setRecords(items);
         setMessage(items.length ? "" : "还没有历史模拟。");
@@ -34,21 +24,19 @@ export default function HistoryPage() {
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : "历史加载失败。"),
       );
-  }, [isLoading, user]);
+  }, []);
 
   useEffect(() => {
-    if (isLoading || !user) return;
     const reportId = new URLSearchParams(window.location.search).get("report");
     if (!reportId) return;
 
-    getCloudBaseReport(reportId)
-      .then((item) => setReport(item.report))
-      .catch(() => setReport({ error: "报告加载失败。" }));
-  }, [isLoading, user]);
+    getSavedReport(reportId)
+      .then((item) => setReportPreview(JSON.stringify(item.report, null, 2)))
+      .catch(() => setReportPreview("报告加载失败。"));
+  }, []);
 
   const remove = async (id: string) => {
-    if (!user) return;
-    await deleteCloudBaseSession(user, id);
+    await deleteSavedSession(id);
     setRecords((current) => current.filter((item) => item.id !== id));
   };
 
@@ -64,10 +52,10 @@ export default function HistoryPage() {
 
         {message && <p className="auth-message">{message}</p>}
 
-        {report && (
+        {reportPreview && (
           <article className="report-preview">
             <h2>历史报告</h2>
-            <pre>{JSON.stringify(report, null, 2)}</pre>
+            <pre>{reportPreview}</pre>
           </article>
         )}
 

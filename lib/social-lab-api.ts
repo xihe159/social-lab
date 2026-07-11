@@ -5,6 +5,7 @@ import type {
   ScenarioKey,
   SimulationReport,
 } from "@/lib/social-lab-types";
+import { getAnonymousUserId } from "@/lib/anonymous-user";
 
 const DEFAULT_API_BASE_URL = "https://social-lab-backend.onrender.com";
 const API_BASE_URL = (
@@ -35,6 +36,8 @@ export type PersonaCreateResponse = {
   evidence: PersonaEvidence[];
   assumptions: string[];
   confidence: number;
+  persona_id?: string | null;
+  saved?: boolean;
 };
 
 export type StateDelta = {
@@ -59,6 +62,8 @@ export type SessionMessageResponse = {
   target_message: BackendChatMessage;
   simulation: SimulationReply;
   updated_state: Persona["state"];
+  session_id?: string | null;
+  saved?: boolean;
 };
 
 type ReportResponse = {
@@ -69,6 +74,8 @@ type ReportResponse = {
   key_risks: string[];
   suggested_rewrite: string;
   next_step_advice: string;
+  report_id?: string | null;
+  saved?: boolean;
 };
 
 export type SavedPersonaRecord = {
@@ -98,18 +105,26 @@ async function requestJson<T>(
 ): Promise<T> {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), 90_000);
-  const headers: HeadersInit = {};
+  const userId = getAnonymousUserId();
+  const headers: HeadersInit = {
+    "X-Social-Lab-User-Id": userId,
+  };
 
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
   }
 
+  const requestBody =
+    body !== undefined && typeof body === "object" && body !== null
+      ? { ...body, user_id: userId }
+      : body;
+
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       method: options.method ?? (body === undefined ? "GET" : "POST"),
-      headers: Object.keys(headers).length > 0 ? headers : undefined,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers,
+      body: requestBody === undefined ? undefined : JSON.stringify(requestBody),
       signal: controller.signal,
     });
   } catch (error) {
@@ -180,10 +195,14 @@ export async function sendSessionMessage(
   persona: Persona,
   messages: ChatMessage[],
   userMessage: string,
+  personaId?: string | null,
+  sessionId?: string | null,
 ): Promise<{
   targetMessage: ChatMessage;
   simulation: SimulationReply;
   updatedPersona: Persona;
+  sessionId?: string | null;
+  saved?: boolean;
 }> {
   const result = await requestJson<SessionMessageResponse>(
     "/api/session/message",
@@ -194,6 +213,8 @@ export async function sendSessionMessage(
       persona,
       messages: toBackendMessages(messages),
       user_message: userMessage,
+      persona_id: personaId,
+      session_id: sessionId,
     },
   );
 
@@ -204,6 +225,8 @@ export async function sendSessionMessage(
       ...persona,
       state: result.updated_state,
     },
+    sessionId: result.session_id,
+    saved: result.saved,
   };
 }
 
@@ -212,6 +235,8 @@ export async function createSimulationReport(
   form: FormData,
   persona: Persona,
   messages: ChatMessage[],
+  personaId?: string | null,
+  sessionId?: string | null,
 ): Promise<SimulationReport> {
   const result = await requestJson<ReportResponse>("/api/session/report", {
     scenario,
@@ -219,6 +244,8 @@ export async function createSimulationReport(
     outcome: form.outcome,
     persona,
     messages: toBackendMessages(messages),
+    persona_id: personaId,
+    session_id: sessionId,
   });
 
   return mapReportResponse(result);
@@ -246,5 +273,50 @@ function mapReportResponse(result: ReportResponse): SimulationReport {
       `下一步：${result.next_step_advice}`,
     ].filter(Boolean),
     rewrite: result.suggested_rewrite,
+    id: result.report_id || undefined,
+    saved: result.saved,
   };
+}
+
+function queryWithUserId(path: string) {
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}user_id=${encodeURIComponent(getAnonymousUserId())}`;
+}
+
+export async function getAnonymousProfile() {
+  return requestJson<{ user_id: string; short_id: string }>(queryWithUserId("/api/me"));
+}
+
+export async function listSavedPersonas() {
+  return requestJson<SavedPersonaRecord[]>(queryWithUserId("/api/personas"));
+}
+
+export async function deleteSavedPersona(personaId: string) {
+  return requestJson<{ deleted: boolean }>(
+    queryWithUserId(`/api/personas/${personaId}`),
+    undefined,
+    { method: "DELETE" },
+  );
+}
+
+export async function listSavedSessions() {
+  return requestJson<SavedSessionRecord[]>(queryWithUserId("/api/sessions"));
+}
+
+export async function getSavedReport(reportId: string) {
+  const result = await requestJson<{ id: string; report: ReportResponse }>(
+    queryWithUserId(`/api/reports/${reportId}`),
+  );
+  return {
+    id: result.id,
+    report: mapReportResponse(result.report),
+  };
+}
+
+export async function deleteSavedSession(sessionId: string) {
+  return requestJson<{ deleted: boolean }>(
+    queryWithUserId(`/api/sessions/${sessionId}`),
+    undefined,
+    { method: "DELETE" },
+  );
 }
