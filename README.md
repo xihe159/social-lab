@@ -12,7 +12,7 @@ https://xihe159.github.io/social-lab/
 ## Current Features
 
 - Responsive desktop and mobile web experience
-- Supabase Email Magic Link login with optional anonymous trial
+- CloudBase email-code and username-password login with optional anonymous trial
 - Saved personas, sessions, messages, and reports for logged-in users
 - History, persona library, and profile pages
 - Advisor, workplace, and social communication scenarios
@@ -27,14 +27,14 @@ https://xihe159.github.io/social-lab/
 ```text
 GitHub Pages static frontend
         |
-        | NEXT_PUBLIC_AGENT_API_BASE_URL / Supabase Auth
+        | NEXT_PUBLIC_AGENT_API_BASE_URL / CloudBase Auth + Database
         v
 Render FastAPI backend
         |
-        | LLM provider + Supabase PostgreSQL
+        | LLM provider
 ```
 
-The frontend is a static Next.js export. GitHub Pages cannot run server code, so the Python backend must be deployed on Render or another web service.
+The frontend is a static Next.js export. GitHub Pages cannot run server code, so the Python backend must be deployed on Render or another web service. User login and saved history are handled by Tencent CloudBase in the browser.
 
 ## Project Structure
 
@@ -80,8 +80,9 @@ Create `.env.local` in the project root:
 
 ```env
 NEXT_PUBLIC_AGENT_API_BASE_URL=https://social-lab-backend.onrender.com
-NEXT_PUBLIC_SUPABASE_URL=https://fhwezvhjbkjojktoqxte.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_CLOUDBASE_ENV_ID=social-lab-d4g9g9ab34e44d7cb
+NEXT_PUBLIC_CLOUDBASE_REGION=ap-shanghai
+NEXT_PUBLIC_CLOUDBASE_PUBLISHABLE_KEY=your-cloudbase-publishable-key
 ```
 
 If you are running the backend locally, use `http://127.0.0.1:8000` instead.
@@ -120,20 +121,9 @@ Create `backend/.env`:
 LLM_API_KEY=your_api_key
 LLM_BASE_URL=https://your-openai-compatible-base-url
 LLM_MODEL_ID=your_model_id
-SUPABASE_URL=https://fhwezvhjbkjojktoqxte.supabase.co
-SUPABASE_SERVICE_KEY=your_supabase_service_role_key
 ```
 
-Use the Supabase project root URL for `SUPABASE_URL` and
-`NEXT_PUBLIC_SUPABASE_URL`. Do not use the REST endpoint ending in `/rest/v1/`.
-
-Before enabling V1.5 persistence, run `backend/supabase_schema.sql` in the
-Supabase SQL editor. In Supabase Auth settings, add these redirect URLs:
-
-```text
-http://localhost:3000/social-lab/auth/callback/
-https://xihe159.github.io/social-lab/auth/callback/
-```
+For CloudBase setup, see `docs/CLOUDBASE_SETUP.md`.
 
 Start the backend:
 
@@ -152,9 +142,6 @@ Main backend APIs:
 - `POST /api/persona/create`
 - `POST /api/session/message`
 - `POST /api/session/report`
-- `GET /api/me`
-- `GET /api/personas`
-- `GET /api/sessions`
 - `GET /health`
 
 ## Deploy Frontend To GitHub Pages
@@ -165,8 +152,9 @@ Before deploying, add this GitHub repository variable:
 
 ```text
 NEXT_PUBLIC_AGENT_API_BASE_URL=https://social-lab-backend.onrender.com
-NEXT_PUBLIC_SUPABASE_URL=https://fhwezvhjbkjojktoqxte.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_CLOUDBASE_ENV_ID=social-lab-d4g9g9ab34e44d7cb
+NEXT_PUBLIC_CLOUDBASE_REGION=ap-shanghai
+NEXT_PUBLIC_CLOUDBASE_PUBLISHABLE_KEY=your-cloudbase-publishable-key
 ```
 
 Then enable GitHub Pages:
@@ -198,8 +186,6 @@ Add Render environment variables:
 LLM_API_KEY
 LLM_BASE_URL
 LLM_MODEL_ID
-SUPABASE_URL
-SUPABASE_SERVICE_KEY
 ```
 
 After deployment, copy the Render service URL and set it as the GitHub repository variable `NEXT_PUBLIC_AGENT_API_BASE_URL`.
@@ -208,12 +194,6 @@ Backend API docs:
 
 ```text
 https://social-lab-backend.onrender.com/docs
-```
-
-Supabase backend connection check:
-
-```text
-https://social-lab-backend.onrender.com/api/debug/supabase
 ```
 
 ## Privacy Note

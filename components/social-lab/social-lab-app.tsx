@@ -7,8 +7,15 @@ import {
   MessageSquare,
   Target,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { appPath } from "@/lib/app-path";
+import {
+  createSessionInCloudBase,
+  saveMessageToCloudBase,
+  savePersonaToCloudBase,
+  saveRelationshipStateToCloudBase,
+  saveReportToCloudBase,
+} from "@/lib/cloudbase-data";
 import { MobileHeader } from "./mobile-header";
 import { useAuth } from "./auth-provider";
 import {
@@ -34,7 +41,7 @@ import type {
 } from "@/lib/social-lab-types";
 
 export function SocialLabApp() {
-  const { accessToken, user } = useAuth();
+  const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [scenario, setScenario] = useState<ScenarioKey>("advisor");
   const [form, setForm] = useState<FormData>(() =>
@@ -56,8 +63,8 @@ export function SocialLabApp() {
   const preset = scenarioPresets[scenario];
   const progress = useMemo(() => `${(step / 5) * 100}%`, [step]);
   const accountLabel = useMemo(() => {
-    const email = user?.email ?? "";
-    return email.slice(0, 1).toUpperCase() || "我";
+    const name = user?.email || user?.username || "";
+    return name.slice(0, 1).toUpperCase() || "我";
   }, [user]);
 
   const showToast = (message: string) => {
@@ -68,6 +75,63 @@ export function SocialLabApp() {
   const goToAccount = () => {
     window.location.href = user ? appPath("/profile/") : appPath("/login/");
   };
+
+  useEffect(() => {
+    if (!user) return;
+
+    const guestRun = window.localStorage.getItem("social_lab_guest_run");
+    if (!guestRun) return;
+
+    const importGuestRun = async () => {
+      try {
+        const parsed = JSON.parse(guestRun) as {
+          scenario: ScenarioKey;
+          form: FormData;
+          persona: Persona;
+          messages: ChatMessage[];
+          report?: SimulationReport | null;
+        };
+        const nextPersonaId = await savePersonaToCloudBase({
+          user,
+          scenario: parsed.scenario,
+          form: parsed.form,
+          persona: parsed.persona,
+        });
+        const nextSessionId = await createSessionInCloudBase({
+          user,
+          scenario: parsed.scenario,
+          form: parsed.form,
+          personaId: nextPersonaId,
+        });
+
+        if (nextSessionId) {
+          for (const message of parsed.messages) {
+            await saveMessageToCloudBase({
+              sessionId: nextSessionId,
+              message,
+            });
+          }
+          await saveRelationshipStateToCloudBase({
+            sessionId: nextSessionId,
+            state: parsed.persona.state,
+          });
+          if (parsed.report) {
+            await saveReportToCloudBase({
+              sessionId: nextSessionId,
+              report: parsed.report,
+            });
+          }
+        }
+
+        window.localStorage.removeItem("social_lab_guest_run");
+        showToast("已保存上次匿名模拟记录。");
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    importGuestRun();
+  }, [user]);
 
   const goToStep = (nextStep: number) => {
     const safeStep = Math.max(0, Math.min(5, nextStep));
@@ -115,18 +179,26 @@ export function SocialLabApp() {
     }
     try {
       setPersonaLoading(true);
-      const result = await createPersona(scenario, form, { accessToken });
+      const result = await createPersona(scenario, form);
       setPersona(result.persona);
-      setPersonaId(result.persona_id ?? null);
+      if (user) {
+        const savedPersonaId = await savePersonaToCloudBase({
+          user,
+          scenario,
+          form,
+          persona: result.persona,
+        });
+        setPersonaId(savedPersonaId);
+        showToast("画像已保存到你的人物库。");
+      } else {
+        setPersonaId(null);
+      }
       setSessionId(null);
       // 不让 AI 目标人物先开口
       // 用户应该先输入自己想说的话
       setMessages([]);
       setReport(null);
       unlockAndGo(3);
-      if (result.saved) {
-        showToast("画像已保存到你的人物库。");
-      }
     } catch (error) {
       console.error(error);
       showToast(
@@ -161,21 +233,43 @@ export function SocialLabApp() {
 
     try {
       setMessageLoading(true);
+      let activeSessionId = sessionId;
+      if (user && !activeSessionId) {
+        activeSessionId = await createSessionInCloudBase({
+          user,
+          scenario,
+          form,
+          personaId,
+        });
+        setSessionId(activeSessionId);
+      }
+
+      if (activeSessionId) {
+        await saveMessageToCloudBase({
+          sessionId: activeSessionId,
+          message: userMessage,
+        });
+      }
+
       const result = await sendSessionMessage(
         scenario,
         form,
         persona,
         messages,
         text,
-        {
-          accessToken,
-          personaId,
-          sessionId,
-        },
       );
       setMessages((current) => [...current, result.targetMessage]);
       setPersona(result.updatedPersona);
-      if (result.sessionId) setSessionId(result.sessionId);
+      if (activeSessionId) {
+        await saveMessageToCloudBase({
+          sessionId: activeSessionId,
+          message: result.targetMessage,
+        });
+        await saveRelationshipStateToCloudBase({
+          sessionId: activeSessionId,
+          state: result.updatedPersona.state,
+        });
+      }
     } catch (error) {
       console.error(error);
       showToast(
@@ -200,14 +294,16 @@ export function SocialLabApp() {
         form,
         persona,
         messages,
-        {
-          accessToken,
-          personaId,
-          sessionId,
-        },
       );
       setReport(nextReport);
-      if (!accessToken) {
+      if (user && sessionId) {
+        const reportId = await saveReportToCloudBase({
+          sessionId,
+          report: nextReport,
+        });
+        setReport({ ...nextReport, id: reportId || undefined, saved: true });
+      }
+      if (!user) {
         window.localStorage.setItem(
           "social_lab_guest_run",
           JSON.stringify({

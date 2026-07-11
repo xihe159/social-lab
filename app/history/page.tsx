@@ -4,26 +4,28 @@ import { ArrowLeft, FileText, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { appPath } from "@/lib/app-path";
 import {
-  deleteSessionRecord,
-  getReportRecord,
-  listSessions,
+  deleteCloudBaseSession,
+  getCloudBaseReport,
+  listCloudBaseSessions,
+} from "@/lib/cloudbase-data";
+import {
   type SavedSessionRecord,
 } from "@/lib/social-lab-api";
 import { useAuth } from "@/components/social-lab/auth-provider";
 
 export default function HistoryPage() {
-  const { accessToken, user } = useAuth();
+  const { user } = useAuth();
   const [records, setRecords] = useState<SavedSessionRecord[]>([]);
   const [report, setReport] = useState<Record<string, unknown> | null>(null);
   const [message, setMessage] = useState("正在加载...");
 
   useEffect(() => {
-    if (!user || !accessToken) {
+    if (!user) {
       setMessage("登录后可以查看历史模拟。");
       return;
     }
 
-    listSessions({ accessToken })
+    listCloudBaseSessions(user)
       .then((items) => {
         setRecords(items);
         setMessage(items.length ? "" : "还没有历史模拟。");
@@ -31,21 +33,21 @@ export default function HistoryPage() {
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : "历史加载失败。"),
       );
-  }, [accessToken, user]);
+  }, [user]);
 
   useEffect(() => {
-    if (!accessToken) return;
+    if (!user) return;
     const reportId = new URLSearchParams(window.location.search).get("report");
     if (!reportId) return;
 
-    getReportRecord(reportId, { accessToken })
+    getCloudBaseReport(reportId)
       .then((item) => setReport(item.report))
       .catch(() => setReport({ error: "报告加载失败。" }));
-  }, [accessToken]);
+  }, [user]);
 
   const remove = async (id: string) => {
-    if (!accessToken) return;
-    await deleteSessionRecord(id, { accessToken });
+    if (!user) return;
+    await deleteCloudBaseSession(id);
     setRecords((current) => current.filter((item) => item.id !== id));
   };
 

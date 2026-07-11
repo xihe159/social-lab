@@ -4,24 +4,26 @@ import { ArrowLeft, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { appPath } from "@/lib/app-path";
 import {
-  deletePersonaRecord,
-  listPersonas,
+  deleteCloudBasePersona,
+  listCloudBasePersonas,
+} from "@/lib/cloudbase-data";
+import {
   type SavedPersonaRecord,
 } from "@/lib/social-lab-api";
 import { useAuth } from "@/components/social-lab/auth-provider";
 
 export default function PersonasPage() {
-  const { accessToken, user } = useAuth();
+  const { user } = useAuth();
   const [records, setRecords] = useState<SavedPersonaRecord[]>([]);
   const [message, setMessage] = useState("正在加载...");
 
   useEffect(() => {
-    if (!user || !accessToken) {
+    if (!user) {
       setMessage("登录后可以查看保存的人物。");
       return;
     }
 
-    listPersonas({ accessToken })
+    listCloudBasePersonas(user)
       .then((items) => {
         setRecords(items);
         setMessage(items.length ? "" : "还没有保存的人物。");
@@ -29,11 +31,11 @@ export default function PersonasPage() {
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : "人物加载失败。"),
       );
-  }, [accessToken, user]);
+  }, [user]);
 
   const remove = async (id: string) => {
-    if (!accessToken) return;
-    await deletePersonaRecord(id, { accessToken });
+    if (!user) return;
+    await deleteCloudBasePersona(id);
     setRecords((current) => current.filter((item) => item.id !== id));
   };
 
