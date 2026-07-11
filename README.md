@@ -80,7 +80,7 @@ Create `.env.local` in the project root:
 
 ```env
 NEXT_PUBLIC_AGENT_API_BASE_URL=https://social-lab-backend.onrender.com
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_URL=https://fhwezvhjbkjojktoqxte.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
@@ -120,9 +120,12 @@ Create `backend/.env`:
 LLM_API_KEY=your_api_key
 LLM_BASE_URL=https://your-openai-compatible-base-url
 LLM_MODEL_ID=your_model_id
-SUPABASE_URL=your_supabase_project_url
+SUPABASE_URL=https://fhwezvhjbkjojktoqxte.supabase.co
 SUPABASE_SERVICE_KEY=your_supabase_service_role_key
 ```
+
+Use the Supabase project root URL for `SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_URL`. Do not use the REST endpoint ending in `/rest/v1/`.
 
 Before enabling V1.5 persistence, run `backend/supabase_schema.sql` in the
 Supabase SQL editor. In Supabase Auth settings, add these redirect URLs:
@@ -162,7 +165,7 @@ Before deploying, add this GitHub repository variable:
 
 ```text
 NEXT_PUBLIC_AGENT_API_BASE_URL=https://social-lab-backend.onrender.com
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_URL=https://fhwezvhjbkjojktoqxte.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
