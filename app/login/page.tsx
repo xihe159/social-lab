@@ -10,6 +10,7 @@ export default function LoginPage() {
     isConfigured,
     sendEmailCode,
     signInWithPassword,
+    signUpWithPassword,
     user,
     verifyEmailCode,
   } = useAuth();
@@ -35,7 +36,6 @@ export default function LoginPage() {
         setMessage("验证码已发送，请打开邮箱查看。");
       } else {
         await verifyEmailCode(code.trim());
-        setMessage("登录成功，正在进入个人中心...");
         window.location.href = appPath("/profile/");
       }
     } catch (error) {
@@ -53,7 +53,6 @@ export default function LoginPage() {
       setIsSubmitting(true);
       setMessage("");
       await signInWithPassword(username.trim(), password);
-      setMessage("登录成功，正在进入个人中心...");
       window.location.href = appPath("/profile/");
     } catch (error) {
       setMessage(
@@ -61,6 +60,21 @@ export default function LoginPage() {
           ? error.message
           : "用户名密码登录失败，请确认账号已注册。",
       );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const registerWithPassword = async () => {
+    if (!username.trim() || !password || isSubmitting) return;
+
+    try {
+      setIsSubmitting(true);
+      setMessage("");
+      await signUpWithPassword(username.trim(), password);
+      window.location.href = appPath("/profile/");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "注册失败。");
     } finally {
       setIsSubmitting(false);
     }
@@ -191,13 +205,10 @@ export default function LoginPage() {
             <button
               className="secondary-action"
               disabled={!isConfigured || isSubmitting}
-              onClick={() => {
-                setMode("email");
-                setMessage("新用户请先用邮箱验证码完成注册/登录。");
-              }}
+              onClick={registerWithPassword}
               type="button"
             >
-              新用户用邮箱注册
+              注册并登录
             </button>
           </form>
         )}

@@ -107,19 +107,16 @@ export function SocialLabApp() {
         if (nextSessionId) {
           for (const message of parsed.messages) {
             await saveMessageToCloudBase({
-              user,
               sessionId: nextSessionId,
               message,
             });
           }
           await saveRelationshipStateToCloudBase({
-            user,
             sessionId: nextSessionId,
             state: parsed.persona.state,
           });
           if (parsed.report) {
             await saveReportToCloudBase({
-              user,
               sessionId: nextSessionId,
               report: parsed.report,
             });
@@ -247,9 +244,8 @@ export function SocialLabApp() {
         setSessionId(activeSessionId);
       }
 
-      if (user && activeSessionId) {
+      if (activeSessionId) {
         await saveMessageToCloudBase({
-          user,
           sessionId: activeSessionId,
           message: userMessage,
         });
@@ -264,14 +260,12 @@ export function SocialLabApp() {
       );
       setMessages((current) => [...current, result.targetMessage]);
       setPersona(result.updatedPersona);
-      if (user && activeSessionId) {
+      if (activeSessionId) {
         await saveMessageToCloudBase({
-          user,
           sessionId: activeSessionId,
           message: result.targetMessage,
         });
         await saveRelationshipStateToCloudBase({
-          user,
           sessionId: activeSessionId,
           state: result.updatedPersona.state,
         });
@@ -304,7 +298,6 @@ export function SocialLabApp() {
       setReport(nextReport);
       if (user && sessionId) {
         const reportId = await saveReportToCloudBase({
-          user,
           sessionId,
           report: nextReport,
         });

@@ -49,30 +49,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      let nextUser: any = null;
-
-      if (auth.getSession) {
-        try {
-          const sessionResult = await auth.getSession();
-          const sessionData = normalizeResponse(sessionResult);
-          nextUser = sessionData?.session?.user || sessionData?.user || null;
-        } catch {
-          nextUser = null;
-        }
-      }
-
-      if (!normalizeUser(nextUser) && auth.getUser) {
-        const result = await auth.getUser();
-        const data = normalizeResponse(result);
-        nextUser = data?.user || data;
-      }
-
-      if (!normalizeUser(nextUser) && auth.getSession) {
-        const sessionResult = await auth.getSession();
-        const sessionData = normalizeResponse(sessionResult);
-        nextUser = sessionData?.session?.user || sessionData?.user || nextUser;
-      }
-
+      const result = await auth.getUser();
+      const data = normalizeResponse(result);
+      const nextUser = data?.user || data;
       setUser(normalizeUser(nextUser));
     } catch {
       setUser(null);
@@ -119,7 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error("请先发送邮箱验证码。");
       }
 
-      assertCloudBaseSuccess(await emailVerifier.verifyOtp({ token: code }));
+      await emailVerifier.verifyOtp({ token: code });
       setEmailVerifier(null);
       await syncUser();
     },
@@ -133,9 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error("CloudBase 尚未配置，暂时无法登录。");
       }
 
-      assertCloudBaseSuccess(
-        await auth.signInWithPassword({ username, password }),
-      );
+      await auth.signInWithPassword({ username, password });
       await syncUser();
     },
     [syncUser],
@@ -148,16 +125,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error("CloudBase 尚未配置，暂时无法注册。");
       }
 
-      if (!username.includes("@")) {
-        throw new Error(
-          "CloudBase 自助注册需要先通过邮箱验证码验证身份，请使用邮箱验证码注册/登录。",
-        );
-      }
-
-      assertCloudBaseSuccess(await auth.signUp({ username, password }));
-      assertCloudBaseSuccess(
-        await auth.signInWithPassword({ username, password }),
-      );
+      await auth.signUp({ username, password });
+      await auth.signInWithPassword({ username, password });
       await syncUser();
     },
     [syncUser],
@@ -197,7 +166,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 function normalizeResponse(value: unknown) {
   const payload = value as {
-    code?: string;
     data?: unknown;
     error?: { message?: string };
     message?: string;
@@ -207,15 +175,7 @@ function normalizeResponse(value: unknown) {
     throw new Error(payload.error.message || "CloudBase 登录失败。");
   }
 
-  if (payload?.code && payload.code !== "SUCCESS" && payload.code !== "NORMAL") {
-    throw new Error(payload.message || `CloudBase 请求失败：${payload.code}`);
-  }
-
   return (payload?.data ?? value) as Record<string, any> | null;
-}
-
-function assertCloudBaseSuccess(value: unknown) {
-  normalizeResponse(value);
 }
 
 function normalizeUser(value: any): CloudBaseUser | null {

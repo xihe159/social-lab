@@ -6,7 +6,7 @@ import { appPath } from "@/lib/app-path";
 import { useAuth } from "@/components/social-lab/auth-provider";
 
 export default function ProfilePage() {
-  const { user, signOut, isConfigured, isLoading } = useAuth();
+  const { user, signOut, isConfigured } = useAuth();
   const [message, setMessage] = useState("");
 
   const logout = async () => {
@@ -29,9 +29,7 @@ export default function ProfilePage() {
           <UserRound size={28} />
         </div>
         <h1>个人中心</h1>
-        {isLoading ? (
-          <p>正在确认登录状态...</p>
-        ) : user ? (
+        {user ? (
           <>
             <p>当前账号：{user.email || user.username || user.id}</p>
             <div className="account-actions">

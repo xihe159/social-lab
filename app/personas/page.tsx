@@ -13,12 +13,11 @@ import {
 import { useAuth } from "@/components/social-lab/auth-provider";
 
 export default function PersonasPage() {
-  const { user, isLoading } = useAuth();
+  const { user } = useAuth();
   const [records, setRecords] = useState<SavedPersonaRecord[]>([]);
   const [message, setMessage] = useState("正在加载...");
 
   useEffect(() => {
-    if (isLoading) return;
     if (!user) {
       setMessage("登录后可以查看保存的人物。");
       return;
@@ -32,11 +31,11 @@ export default function PersonasPage() {
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : "人物加载失败。"),
       );
-  }, [isLoading, user]);
+  }, [user]);
 
   const remove = async (id: string) => {
     if (!user) return;
-    await deleteCloudBasePersona(user, id);
+    await deleteCloudBasePersona(id);
     setRecords((current) => current.filter((item) => item.id !== id));
   };
 

@@ -14,13 +14,12 @@ import {
 import { useAuth } from "@/components/social-lab/auth-provider";
 
 export default function HistoryPage() {
-  const { user, isLoading } = useAuth();
+  const { user } = useAuth();
   const [records, setRecords] = useState<SavedSessionRecord[]>([]);
   const [report, setReport] = useState<Record<string, unknown> | null>(null);
   const [message, setMessage] = useState("正在加载...");
 
   useEffect(() => {
-    if (isLoading) return;
     if (!user) {
       setMessage("登录后可以查看历史模拟。");
       return;
@@ -34,21 +33,21 @@ export default function HistoryPage() {
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : "历史加载失败。"),
       );
-  }, [isLoading, user]);
+  }, [user]);
 
   useEffect(() => {
-    if (isLoading || !user) return;
+    if (!user) return;
     const reportId = new URLSearchParams(window.location.search).get("report");
     if (!reportId) return;
 
     getCloudBaseReport(reportId)
       .then((item) => setReport(item.report))
       .catch(() => setReport({ error: "报告加载失败。" }));
-  }, [isLoading, user]);
+  }, [user]);
 
   const remove = async (id: string) => {
     if (!user) return;
-    await deleteCloudBaseSession(user, id);
+    await deleteCloudBaseSession(id);
     setRecords((current) => current.filter((item) => item.id !== id));
   };
 
