@@ -16,7 +16,6 @@ from app.api.session import router as session_router
 from app.api.report import router as report_router
 from app.api.strategy import router as strategy_router
 from app.api.evaluation import router as evaluation_router
-from app.api.anonymous_data import router as anonymous_data_router
 
 try:
     from app.llm.client import LLMClientError
@@ -126,7 +125,6 @@ def create_app() -> FastAPI:
     app.include_router(report_router)
     app.include_router(strategy_router)
     app.include_router(evaluation_router)
-    app.include_router(anonymous_data_router)
 
     @app.get("/")
     async def root():

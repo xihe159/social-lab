@@ -28,7 +28,7 @@ class CoachAgent:
             ReportResponse: 沟通成功率、可能结果、优点、问题、风险、改写建议和下一步建议。
         """
 
-        payload = request.model_dump(exclude={"user_id", "persona_id", "session_id"})
+        payload = request.model_dump()
 
         result = await generate_structured(
             system_prompt=COACH_SYSTEM_PROMPT,

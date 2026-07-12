@@ -1,4 +1,4 @@
-import { ArrowLeft, UserRound } from "lucide-react";
+import { ArrowLeft, LogIn } from "lucide-react";
 import { stepLabels } from "@/lib/social-lab-data";
 
 type MobileHeaderProps = {
@@ -39,14 +39,14 @@ export function MobileHeader({
       <button
         className="icon-button account-button"
         onClick={onAccountClick}
-        aria-label="查看本机记录"
-        title="查看本机记录"
+        aria-label={isSignedIn ? "进入个人中心" : "登录账号"}
+        title={isSignedIn ? "进入个人中心" : "登录账号"}
         type="button"
       >
         {isSignedIn ? (
           <span className="account-initial">{accountLabel}</span>
         ) : (
-          <UserRound size={20} />
+          <LogIn size={20} />
         )}
       </button>
     </header>

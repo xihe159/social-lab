@@ -32,7 +32,7 @@ class PersonaAgent:
             PersonaCreateResponse: 可直接返回给 API 层的结构化人物画像。
         """
 
-        payload = request.model_dump(exclude={"user_id"})
+        payload = request.model_dump()
 
         result = await generate_structured(
             system_prompt=PERSONA_SYSTEM_PROMPT,

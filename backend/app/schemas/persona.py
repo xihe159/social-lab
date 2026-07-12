@@ -27,7 +27,6 @@ class PersonaEvidence(BaseModel):
 class PersonaCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    user_id: str = ""
     scenario: ScenarioKey
     goal: str
     outcome: str

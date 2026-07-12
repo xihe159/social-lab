@@ -56,7 +56,6 @@ class SessionMessageRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    user_id: str = ""
     scenario: ScenarioKey
     goal: str = Field(
         description="用户想通过本次沟通达成的目标",
@@ -81,9 +80,6 @@ class SessionMessageRequest(BaseModel):
         后续建议统一改为 request.goal。
         """
         return self.goal
-
-    def latest_chat_message(self) -> ChatMessage:
-        return ChatMessage(role="user", content=self.user_message)
 
 
 class SimulationReply(BaseModel):

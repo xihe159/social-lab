@@ -1,24 +1,34 @@
-# CloudBase Backend Setup
+# CloudBase Setup
 
-Social Lab now uses CloudBase only from the Render FastAPI backend. The browser
-does not call CloudBase Auth or CloudBase Database directly.
+Social Lab V1.5 uses CloudBase Auth and CloudBase Database on the frontend.
+The FastAPI backend only runs AI agent APIs.
 
-## Render Environment Variables
+## Frontend Environment Variable
 
-Add these variables to the Render backend service:
+Set this GitHub Actions repository variable:
 
 ```text
-CLOUDBASE_ENV_ID=social-lab-d4g9g9ab34e44d7cb
-CLOUDBASE_REGION=ap-shanghai
-CLOUDBASE_SERVER_API_KEY=your-cloudbase-server-api-key
+NEXT_PUBLIC_CLOUDBASE_ENV_ID=social-lab-d4g9g9ab34e44d7cb
+NEXT_PUBLIC_CLOUDBASE_REGION=ap-shanghai
+NEXT_PUBLIC_CLOUDBASE_PUBLISHABLE_KEY=your-cloudbase-publishable-key
 ```
 
-Do not add `CLOUDBASE_SERVER_API_KEY` to GitHub Pages, frontend `.env.local`, or
+For local development, add it to `.env.local`.
+
+`NEXT_PUBLIC_CLOUDBASE_PUBLISHABLE_KEY` is safe for browser builds. Do not put
+the CloudBase Server API Key in GitHub Pages, `.env.local` for frontend code, or
 any `NEXT_PUBLIC_` variable.
+
+## Auth Providers
+
+Enable these CloudBase authentication providers:
+
+- Email verification code
+- Username and password
 
 ## Database Collections
 
-Create these CloudBase collections:
+Create these collections:
 
 ```text
 personas
@@ -28,17 +38,19 @@ reports
 relationship_states
 ```
 
-New Social Lab records use `anonymous_id` as the user identity. The value comes
-from the frontend-generated `sl_anon_<uuid>` stored in browser `localStorage`.
+All records written by Social Lab include an `owner_id` field. Configure
+database permissions so users can only read and write their own records.
 
-Recommended database posture:
+Suggested rule shape:
 
-- Disable direct browser writes.
-- Let only the backend Server API Key write data.
-- Keep records queryable by `anonymous_id` for history, persona library, and
-  report lookup.
+```js
+{
+  "read": "auth != null && doc.owner_id == auth.uid",
+  "write": "auth != null && doc.owner_id == auth.uid"
+}
+```
 
-## Notes
-
-CloudBase Auth providers are no longer required for V1.5 anonymous usage.
-Existing old `owner_id` records are not migrated by this version.
+For `messages`, `reports`, and `relationship_states`, records are linked by
+`session_id`. If collection-level linked rules are hard to express in your
+CloudBase plan, start with authenticated-user-only permissions during testing,
+then move these writes behind a CloudBase Function in the next hardening pass.

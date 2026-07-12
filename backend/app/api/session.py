@@ -3,10 +3,7 @@
 
 from fastapi import APIRouter, HTTPException
 
-from app.core.identity import validate_anonymous_user_id
 from app.services.session_orchestrator import SessionOrchestrator
-from app.services.cloudbase import CloudBaseError
-from app.services.persistence import get_persistence
 from app.llm.client import LLMClientError
 from app.schemas.session import SessionMessageRequest, SessionMessageResponse
 
@@ -27,48 +24,7 @@ async def send_message(request: SessionMessageRequest) -> SessionMessageResponse
     """
 
     try:
-        anonymous_id = validate_anonymous_user_id(request.user_id)
-        persistence = get_persistence()
-        session_id = persistence.ensure_session(
-            anonymous_id,
-            scenario=request.scenario,
-            goal=request.goal,
-            persona_id=request.persona_id,
-            session_id=request.session_id,
-        )
-
-        result = await orchestrator.handle_message(request)
-
-        if session_id:
-            persistence.save_message(
-                anonymous_id,
-                session_id,
-                request.latest_chat_message(),
-            )
-            persistence.save_message(
-                anonymous_id,
-                session_id,
-                result.target_message,
-            )
-            persistence.save_relationship_state(
-                anonymous_id,
-                session_id,
-                result.updated_state.model_dump(),
-            )
-
-        return result.model_copy(
-            update={
-                "session_id": session_id,
-                "saved": bool(session_id),
-            }
-        )
-    except HTTPException:
-        raise
-    except CloudBaseError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"CloudBase 保存 Session 失败：{exc}",
-        ) from exc
+        return await orchestrator.handle_message(request)
     except LLMClientError as exc:
         raise HTTPException(
             status_code=502,

@@ -6,12 +6,16 @@ type ReportScreenProps = {
   report: SimulationReport;
   onCopy: () => void;
   onRetry: () => void;
+  isSignedIn: boolean;
+  onLoginToSave: () => void;
 };
 
 export function ReportScreen({
   report,
   onCopy,
   onRetry,
+  isSignedIn,
+  onLoginToSave,
 }: ReportScreenProps) {
   return (
     <section className="screen report-screen is-current">
@@ -69,12 +73,17 @@ export function ReportScreen({
         </article>
       </div>
 
-      <div className="save-prompt">
-        <div>
-          <b>已自动保存到本机记录</b>
-          <p>同一浏览器下次打开时，可以在个人中心继续查看。</p>
+      {!isSignedIn && (
+        <div className="save-prompt">
+          <div>
+            <b>登录后保存本次记录</b>
+            <p>保存人物、聊天和报告，下次可以继续查看。</p>
+          </div>
+          <button className="secondary-action" onClick={onLoginToSave} type="button">
+            去登录
+          </button>
         </div>
-      </div>
+      )}
 
       <div className="footer-actions">
         <button className="primary-action" onClick={onRetry} type="button">

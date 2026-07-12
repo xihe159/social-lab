@@ -12,9 +12,9 @@ https://xihe159.github.io/social-lab/
 ## Current Features
 
 - Responsive desktop and mobile web experience
-- Anonymous local identity without email verification or password login
-- Saved personas, sessions, messages, and reports through the Render backend
-- History, persona library, and local profile pages
+- CloudBase email-code and username-password login with optional anonymous trial
+- Saved personas, sessions, messages, and reports for logged-in users
+- History, persona library, and profile pages
 - Advisor, workplace, and social communication scenarios
 - Goal, expected outcome, target-person profile, relationship, habit, and chat-log input
 - AI-generated Persona Card and Relationship State
@@ -27,14 +27,14 @@ https://xihe159.github.io/social-lab/
 ```text
 GitHub Pages static frontend
         |
-        | NEXT_PUBLIC_AGENT_API_BASE_URL
+        | NEXT_PUBLIC_AGENT_API_BASE_URL / CloudBase Auth + Database
         v
 Render FastAPI backend
         |
-        | LLM provider / CloudBase Database
+        | LLM provider
 ```
 
-The frontend is a static Next.js export. GitHub Pages cannot run server code, so the Python backend must be deployed on Render or another web service. The browser stores a local anonymous `user_id`; saved history is written by the Render backend to Tencent CloudBase.
+The frontend is a static Next.js export. GitHub Pages cannot run server code, so the Python backend must be deployed on Render or another web service. User login and saved history are handled by Tencent CloudBase in the browser.
 
 ## Project Structure
 
@@ -52,7 +52,6 @@ social-lab/
 │       └── social-lab-app.tsx
 ├── lib/
 │   ├── social-lab-api.ts
-│   ├── anonymous-user.ts
 │   ├── social-lab-data.ts
 │   ├── social-lab-logic.ts
 │   └── social-lab-types.ts
@@ -81,6 +80,9 @@ Create `.env.local` in the project root:
 
 ```env
 NEXT_PUBLIC_AGENT_API_BASE_URL=https://social-lab-backend.onrender.com
+NEXT_PUBLIC_CLOUDBASE_ENV_ID=social-lab-d4g9g9ab34e44d7cb
+NEXT_PUBLIC_CLOUDBASE_REGION=ap-shanghai
+NEXT_PUBLIC_CLOUDBASE_PUBLISHABLE_KEY=your-cloudbase-publishable-key
 ```
 
 If you are running the backend locally, use `http://127.0.0.1:8000` instead.
@@ -119,9 +121,6 @@ Create `backend/.env`:
 LLM_API_KEY=your_api_key
 LLM_BASE_URL=https://your-openai-compatible-base-url
 LLM_MODEL_ID=your_model_id
-CLOUDBASE_ENV_ID=social-lab-d4g9g9ab34e44d7cb
-CLOUDBASE_REGION=ap-shanghai
-CLOUDBASE_SERVER_API_KEY=your-cloudbase-server-api-key
 ```
 
 For CloudBase setup, see `docs/CLOUDBASE_SETUP.md`.
@@ -143,9 +142,6 @@ Main backend APIs:
 - `POST /api/persona/create`
 - `POST /api/session/message`
 - `POST /api/session/report`
-- `GET /api/personas`
-- `GET /api/sessions`
-- `GET /api/reports/{report_id}`
 - `GET /health`
 
 ## Deploy Frontend To GitHub Pages
@@ -156,6 +152,9 @@ Before deploying, add this GitHub repository variable:
 
 ```text
 NEXT_PUBLIC_AGENT_API_BASE_URL=https://social-lab-backend.onrender.com
+NEXT_PUBLIC_CLOUDBASE_ENV_ID=social-lab-d4g9g9ab34e44d7cb
+NEXT_PUBLIC_CLOUDBASE_REGION=ap-shanghai
+NEXT_PUBLIC_CLOUDBASE_PUBLISHABLE_KEY=your-cloudbase-publishable-key
 ```
 
 Then enable GitHub Pages:
@@ -187,9 +186,6 @@ Add Render environment variables:
 LLM_API_KEY
 LLM_BASE_URL
 LLM_MODEL_ID
-CLOUDBASE_ENV_ID
-CLOUDBASE_REGION
-CLOUDBASE_SERVER_API_KEY
 ```
 
 After deployment, copy the Render service URL and set it as the GitHub repository variable `NEXT_PUBLIC_AGENT_API_BASE_URL`.

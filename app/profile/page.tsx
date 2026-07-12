@@ -1,28 +1,21 @@
 "use client";
 
-import { ArrowLeft, History, RefreshCw, UserRound } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowLeft, History, LogOut, UserRound } from "lucide-react";
+import { useState } from "react";
 import { appPath } from "@/lib/app-path";
-import {
-  formatAnonymousUserLabel,
-  getAnonymousUserId,
-  resetAnonymousUserId,
-} from "@/lib/anonymous-user";
+import { useAuth } from "@/components/social-lab/auth-provider";
 
 export default function ProfilePage() {
-  const [anonymousUserId, setAnonymousUserId] = useState("");
+  const { user, signOut, isConfigured, isLoading } = useAuth();
+  const [message, setMessage] = useState("");
 
-  useEffect(() => {
-    setAnonymousUserId(getAnonymousUserId());
-  }, []);
-
-  const resetIdentity = () => {
-    const ok = window.confirm(
-      "确定要重置本机身份吗？重置后，这个浏览器将使用新的记录身份，旧记录不会自动删除。",
-    );
-    if (!ok) return;
-
-    setAnonymousUserId(resetAnonymousUserId());
+  const logout = async () => {
+    try {
+      await signOut();
+      window.location.href = appPath("/");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "退出登录失败。");
+    }
   };
 
   return (
@@ -35,23 +28,36 @@ export default function ProfilePage() {
         <div className="account-avatar">
           <UserRound size={28} />
         </div>
-        <h1>本机记录</h1>
-        <p>当前本机身份：{formatAnonymousUserLabel(anonymousUserId)}</p>
-        <p className="muted-copy">
-          Social Lab 会用这个匿名身份保存人物、模拟记录和复盘报告。
-        </p>
-
-        <div className="account-actions">
-          <a className="secondary-action" href={appPath("/history/")}>
-            <History size={17} /> 历史模拟
-          </a>
-          <a className="secondary-action" href={appPath("/personas/")}>
-            我的人物
-          </a>
-          <button className="dark-action" onClick={resetIdentity} type="button">
-            <RefreshCw size={17} /> 重置本机身份
-          </button>
-        </div>
+        <h1>个人中心</h1>
+        {isLoading ? (
+          <p>正在确认登录状态...</p>
+        ) : user ? (
+          <>
+            <p>当前账号：{user.email || user.username || user.id}</p>
+            <div className="account-actions">
+              <a className="secondary-action" href={appPath("/history/")}>
+                <History size={17} /> 历史模拟
+              </a>
+              <a className="secondary-action" href={appPath("/personas/")}>
+                我的人物
+              </a>
+              <button className="dark-action" onClick={logout} type="button">
+                <LogOut size={17} /> 退出登录
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p>登录后可以保存人物、模拟记录和复盘报告。</p>
+            <a className="primary-action" href={appPath("/login/")}>
+              去登录
+            </a>
+          </>
+        )}
+        {!isConfigured && (
+          <p className="auth-error">CloudBase 环境 ID 尚未配置，线上登录会暂不可用。</p>
+        )}
+        {message && <p className="auth-error">{message}</p>}
       </section>
     </main>
   );
