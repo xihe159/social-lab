@@ -31,7 +31,7 @@ export default function ProfilePage() {
         <h1>个人中心</h1>
         {user ? (
           <>
-            <p>当前账号：{user.email || user.username || user.id}</p>
+            <p>当前账号：{user.email}</p>
             <div className="account-actions">
               <a className="secondary-action" href={appPath("/history/")}>
                 <History size={17} /> 历史模拟
@@ -53,7 +53,7 @@ export default function ProfilePage() {
           </>
         )}
         {!isConfigured && (
-          <p className="auth-error">CloudBase 环境 ID 尚未配置，线上登录会暂不可用。</p>
+          <p className="auth-error">Supabase 尚未配置，线上登录会暂不可用。</p>
         )}
         {message && <p className="auth-error">{message}</p>}
       </section>

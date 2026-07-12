@@ -14,6 +14,7 @@ const API_BASE_URL = (
 ).replace(/\/$/, "");
 
 type RequestOptions = {
+  accessToken?: string | null;
   method?: "GET" | "POST" | "DELETE";
 };
 
@@ -35,6 +36,8 @@ export type PersonaCreateResponse = {
   evidence: PersonaEvidence[];
   assumptions: string[];
   confidence: number;
+  persona_id?: string;
+  saved?: boolean;
 };
 
 export type StateDelta = {
@@ -59,6 +62,8 @@ export type SessionMessageResponse = {
   target_message: BackendChatMessage;
   simulation: SimulationReply;
   updated_state: Persona["state"];
+  session_id?: string;
+  saved?: boolean;
 };
 
 type ReportResponse = {
@@ -69,6 +74,13 @@ type ReportResponse = {
   key_risks: string[];
   suggested_rewrite: string;
   next_step_advice: string;
+  report_id?: string;
+  saved?: boolean;
+};
+
+export type CurrentUser = {
+  id: string;
+  email: string | null;
 };
 
 export type SavedPersonaRecord = {
@@ -91,6 +103,12 @@ export type SavedSessionRecord = {
   latest_report_id?: string | null;
 };
 
+export type SavedSessionDetail = SavedSessionRecord & {
+  messages: ChatMessage[];
+  report: SimulationReport | null;
+  persona: Persona | null;
+};
+
 async function requestJson<T>(
   path: string,
   body?: unknown,
@@ -102,6 +120,10 @@ async function requestJson<T>(
 
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
+  }
+
+  if (options.accessToken) {
+    headers.Authorization = `Bearer ${options.accessToken}`;
   }
 
   let response: Response;
@@ -162,6 +184,7 @@ export async function checkAgentHealth() {
 export async function createPersona(
   scenario: ScenarioKey,
   form: FormData,
+  options: RequestOptions = {},
 ): Promise<PersonaCreateResponse> {
   return requestJson<PersonaCreateResponse>("/api/persona/create", {
     scenario,
@@ -171,7 +194,7 @@ export async function createPersona(
     relation: form.relation,
     habit: form.habit,
     chatLog: form.chatLog,
-  });
+  }, options);
 }
 
 export async function sendSessionMessage(
@@ -180,10 +203,13 @@ export async function sendSessionMessage(
   persona: Persona,
   messages: ChatMessage[],
   userMessage: string,
+  options: RequestOptions & { personaId?: string | null; sessionId?: string | null } = {},
 ): Promise<{
   targetMessage: ChatMessage;
   simulation: SimulationReply;
   updatedPersona: Persona;
+  sessionId?: string;
+  saved?: boolean;
 }> {
   const result = await requestJson<SessionMessageResponse>(
     "/api/session/message",
@@ -194,7 +220,10 @@ export async function sendSessionMessage(
       persona,
       messages: toBackendMessages(messages),
       user_message: userMessage,
+      persona_id: options.personaId,
+      session_id: options.sessionId,
     },
+    options,
   );
 
   return {
@@ -204,6 +233,8 @@ export async function sendSessionMessage(
       ...persona,
       state: result.updated_state,
     },
+    sessionId: result.session_id,
+    saved: result.saved,
   };
 }
 
@@ -212,6 +243,7 @@ export async function createSimulationReport(
   form: FormData,
   persona: Persona,
   messages: ChatMessage[],
+  options: RequestOptions & { personaId?: string | null; sessionId?: string | null } = {},
 ): Promise<SimulationReport> {
   const result = await requestJson<ReportResponse>("/api/session/report", {
     scenario,
@@ -219,9 +251,15 @@ export async function createSimulationReport(
     outcome: form.outcome,
     persona,
     messages: toBackendMessages(messages),
-  });
+    persona_id: options.personaId,
+    session_id: options.sessionId,
+  }, options);
 
-  return mapReportResponse(result);
+  return {
+    ...mapReportResponse(result),
+    id: result.report_id,
+    saved: result.saved,
+  };
 }
 
 function mapReportResponse(result: ReportResponse): SimulationReport {
@@ -247,4 +285,62 @@ function mapReportResponse(result: ReportResponse): SimulationReport {
     ].filter(Boolean),
     rewrite: result.suggested_rewrite,
   };
+}
+
+export async function getCurrentUser(options: RequestOptions) {
+  return requestJson<CurrentUser>("/api/me", undefined, options);
+}
+
+export async function listPersonas(options: RequestOptions) {
+  return requestJson<SavedPersonaRecord[]>("/api/personas", undefined, options);
+}
+
+export async function listSessions(options: RequestOptions) {
+  return requestJson<SavedSessionRecord[]>("/api/sessions", undefined, options);
+}
+
+export async function getSessionDetail(id: string, options: RequestOptions) {
+  return requestJson<SavedSessionDetail>(`/api/sessions/${id}`, undefined, options);
+}
+
+export async function getReportRecord(id: string, options: RequestOptions) {
+  return requestJson<{ id: string; report: Record<string, unknown> }>(
+    `/api/reports/${id}`,
+    undefined,
+    options,
+  );
+}
+
+export async function deleteSessionRecord(id: string, options: RequestOptions) {
+  return requestJson<{ ok: boolean }>(`/api/sessions/${id}`, undefined, {
+    ...options,
+    method: "DELETE",
+  });
+}
+
+export async function deletePersonaRecord(id: string, options: RequestOptions) {
+  return requestJson<{ ok: boolean }>(`/api/personas/${id}`, undefined, {
+    ...options,
+    method: "DELETE",
+  });
+}
+
+export async function importGuestRun(
+  payload: {
+    scenario: ScenarioKey;
+    form: FormData;
+    persona: Persona;
+    messages: ChatMessage[];
+    report?: SimulationReport | null;
+  },
+  options: RequestOptions,
+) {
+  return requestJson<{ saved: boolean; session_id?: string; persona_id?: string }>(
+    "/api/guest-runs/import",
+    {
+      ...payload,
+      messages: toBackendMessages(payload.messages),
+    },
+    options,
+  );
 }

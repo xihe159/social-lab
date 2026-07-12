@@ -1,8 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from app.core.auth import AuthUser, optional_current_user
 from app.agents.coach_agent import CoachAgent
 from app.llm.client import LLMClientError
 from app.schemas.report import ReportRequest, ReportResponse
+from app.services.persistence import PersistenceService
 
 
 router = APIRouter(prefix="/api/session", tags=["report"])
@@ -10,7 +12,10 @@ router = APIRouter(prefix="/api/session", tags=["report"])
 coach_agent = CoachAgent()
 
 @router.post("/report", response_model=ReportResponse)
-async def create_report(request: ReportRequest) -> ReportResponse:
+async def create_report(
+    request: ReportRequest,
+    user: AuthUser | None = Depends(optional_current_user),
+) -> ReportResponse:
     """
     生成沟通模拟报告。
 
@@ -19,7 +24,37 @@ async def create_report(request: ReportRequest) -> ReportResponse:
     """
 
     try:
-        return await coach_agent.run(request)
+        result = await coach_agent.run(request)
+
+        if user is not None:
+            try:
+                store = PersistenceService()
+                session_id = request.session_id or store.create_session(
+                    user=user,
+                    scenario=request.scenario,
+                    goal=request.goal,
+                    persona_id=request.persona_id,
+                    status="completed",
+                )
+                if not request.session_id:
+                    for message in request.messages:
+                        store.save_message(
+                            session_id=session_id,
+                            role=message.role,
+                            content=message.content,
+                        )
+                report_id = store.save_report(session_id=session_id, report=result)
+                store.save_relationship_state(
+                    session_id=session_id,
+                    state=request.persona.state,
+                )
+                return result.model_copy(
+                    update={"report_id": report_id, "saved": True}
+                )
+            except Exception:
+                return result.model_copy(update={"saved": False})
+
+        return result
     except LLMClientError as exc:
         raise HTTPException(
             status_code=502,
