@@ -59,8 +59,6 @@ export type ReportOutcome = {
 };
 
 export type SimulationReport = {
-  id?: string;
-  saved?: boolean;
   score: number;
   reason: string;
   outcomes: ReportOutcome[];

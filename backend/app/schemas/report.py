@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -15,8 +15,6 @@ class ReportRequest(BaseModel):
     outcome: str = ""
     persona: Persona
     messages: List[ChatMessage]
-    persona_id: Optional[str] = None
-    session_id: Optional[str] = None
 
     @property
     def user_goal(self) -> str:
@@ -33,5 +31,3 @@ class ReportResponse(BaseModel):
     key_risks: List[str] = Field(description="主要沟通风险")
     suggested_rewrite: str = Field(description="推荐改写后的完整话术")
     next_step_advice: str = Field(description="下一步沟通建议")
-    report_id: Optional[str] = None
-    saved: bool = False

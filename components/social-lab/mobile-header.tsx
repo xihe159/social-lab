@@ -1,20 +1,14 @@
-import { ArrowLeft, LogIn } from "lucide-react";
+import { ArrowLeft, BrainCircuit } from "lucide-react";
 import { stepLabels } from "@/lib/social-lab-data";
 
 type MobileHeaderProps = {
   currentStep: number;
   onBack: () => void;
-  onAccountClick: () => void;
-  accountLabel: string;
-  isSignedIn: boolean;
 };
 
 export function MobileHeader({
   currentStep,
   onBack,
-  onAccountClick,
-  accountLabel,
-  isSignedIn,
 }: MobileHeaderProps) {
   const stepText =
     currentStep === 0
@@ -37,17 +31,12 @@ export function MobileHeader({
         <span>{stepText}</span>
       </div>
       <button
-        className="icon-button account-button"
-        onClick={onAccountClick}
-        aria-label={isSignedIn ? "进入个人中心" : "登录账号"}
-        title={isSignedIn ? "进入个人中心" : "登录账号"}
+        className="icon-button"
+        aria-label="AI 模拟"
+        title="AI 模拟"
         type="button"
       >
-        {isSignedIn ? (
-          <span className="account-initial">{accountLabel}</span>
-        ) : (
-          <LogIn size={20} />
-        )}
+        <BrainCircuit size={20} />
       </button>
     </header>
   );
