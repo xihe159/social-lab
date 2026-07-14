@@ -13,6 +13,9 @@ const API_BASE_URL = (
     : undefined) || DEFAULT_API_BASE_URL
 ).replace(/\/$/, "");
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 90_000;
+const REPORT_REQUEST_TIMEOUT_MS = 180_000;
+
 type BackendChatMessage = {
   role: "user" | "target";
   content: string;
@@ -67,9 +70,13 @@ type ReportResponse = {
   next_step_advice: string;
 };
 
-async function requestJson<T>(path: string, body?: unknown): Promise<T> {
+async function requestJson<T>(
+  path: string,
+  body?: unknown,
+  timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
+): Promise<T> {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), 90_000);
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
 
   let response: Response;
   try {
@@ -181,13 +188,17 @@ export async function createSimulationReport(
   persona: Persona,
   messages: ChatMessage[],
 ): Promise<SimulationReport> {
-  const result = await requestJson<ReportResponse>("/api/session/report", {
-    scenario,
-    goal: form.goal,
-    outcome: form.outcome,
-    persona,
-    messages: toBackendMessages(messages),
-  });
+  const result = await requestJson<ReportResponse>(
+    "/api/session/report",
+    {
+      scenario,
+      goal: form.goal,
+      outcome: form.outcome,
+      persona,
+      messages: toBackendMessages(messages),
+    },
+    REPORT_REQUEST_TIMEOUT_MS,
+  );
 
   return mapReportResponse(result);
 }
