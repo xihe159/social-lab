@@ -3,6 +3,11 @@ from __future__ import annotations
 import json
 from typing import Any, Literal
 
+import time
+import logging
+
+logger = logging.getLogger(__name__)
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.llm.client import generate_structured
@@ -633,25 +638,39 @@ class CoachAgent:
         self.report_assembler = ReportAssembler()
 
     async def run(self, request: ReportRequest) -> ReportResponse:
-        prediction = await self.prediction_agent.run(request)
+        total_start = time.perf_counter()
 
+        start = time.perf_counter()
+        prediction = await self.prediction_agent.run(request)
+        logger.info("PredictionAgent finished in %.2fs", time.perf_counter() - start)
+
+        start = time.perf_counter()
         analysis = await self.analysis_agent.run(
             request=request,
             prediction=prediction,
         )
+        logger.info("AnalysisAgent finished in %.2fs", time.perf_counter() - start)
 
+        start = time.perf_counter()
         rewrite = await self.rewrite_agent.run(
             request=request,
             prediction=prediction,
             analysis=analysis,
         )
+        logger.info("RewriteAgent finished in %.2fs", time.perf_counter() - start)
 
-        return self.report_assembler.run(
+        start = time.perf_counter()
+        report = self.report_assembler.run(
             request=request,
             prediction=prediction,
             analysis=analysis,
             rewrite=rewrite,
         )
+        logger.info("ReportAssembler finished in %.2fs", time.perf_counter() - start)
+
+        logger.info("CoachAgent report finished in %.2fs", time.perf_counter() - total_start)
+
+        return report
 
 
 # =========================================================
