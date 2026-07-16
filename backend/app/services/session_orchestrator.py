@@ -1,5 +1,5 @@
 # social-lab/backend/app/services/session_orchestrator.py
-# 2026/07/04
+# 2026/07/16
 
 from __future__ import annotations
 
@@ -23,11 +23,12 @@ from app.schemas.session import (
     SimulationReply,
     StateDelta,
 )
-from app.schemas.state import StateEvaluateRequest
+from app.schemas.state import StateEvaluateRequest, StateEvaluationResponse
 from app.schemas.safety import SafetyCheckRequest, SafetyCheckResponse
 
 
 logger = logging.getLogger(__name__)
+
 
 class SessionOrchestrator:
     """
@@ -36,7 +37,7 @@ class SessionOrchestrator:
     当前流程：
     1. SafetyAgent：检查用户输入是否存在隐私、操控、骚扰、威胁等风险；
     2. SimulationAgent：生成目标人物回复；
-    3. StateAgent：重新评估关系状态变化；
+    3. StateAgent：重新评估关系状态变化，并更新对话氛围与节奏动态指标；
     4. MemoryAgent：更新当前会话短期记忆。
 
     设计原则：
@@ -74,7 +75,7 @@ class SessionOrchestrator:
         request: SessionMessageRequest,
     ) -> SessionMessageResponse:
         """
-        处理一轮用户消息，并返回目标人物回复、状态变化、记忆更新和安全检查结果。
+        处理一轮用户消息，并返回目标人物回复、状态变化、动态指标、记忆更新和安全检查结果。
         """
         trace_id = uuid4().hex[:8]
         started_at = time.perf_counter()
@@ -86,6 +87,7 @@ class SessionOrchestrator:
                 "scenario": request.scenario,
                 "message_count": len(request.messages),
                 "has_memory": request.memory is not None,
+                "has_current_dynamics": request.current_dynamics is not None,
                 "user_message_length": len(request.user_message),
                 "goal_length": len(request.goal),
                 "outcome_length": len(request.outcome or ""),
@@ -128,6 +130,7 @@ class SessionOrchestrator:
                     "scenario": request.scenario,
                     "final_risk_flags": blocked_response.simulation.risk_flags,
                     "has_updated_memory": blocked_response.updated_memory is not None,
+                    "has_state_metrics": blocked_response.state_metrics is not None,
                 },
             )
 
@@ -182,6 +185,10 @@ class SessionOrchestrator:
                 "final_risk_flags": simulation_response.simulation.risk_flags,
                 "reply_length": len(simulation_response.target_message.content),
                 "has_updated_memory": simulation_response.updated_memory is not None,
+                "has_state_metrics": simulation_response.state_metrics is not None,
+                "rhythm_label": simulation_response.rhythm_label,
+                "atmosphere_label": simulation_response.atmosphere_label,
+                "recommended_next_move": simulation_response.recommended_next_move,
             },
         )
 
@@ -260,6 +267,7 @@ class SessionOrchestrator:
                 "scenario": request.scenario,
                 "message_count": len(request.messages),
                 "has_memory": request.memory is not None,
+                "has_current_dynamics": request.current_dynamics is not None,
             },
         )
 
@@ -339,6 +347,7 @@ class SessionOrchestrator:
                 "agent": "StateAgent",
                 "scenario": request.scenario,
                 "fallback": "simulation_agent_state_delta",
+                "has_current_dynamics": request.current_dynamics is not None,
             },
         )
 
@@ -357,6 +366,7 @@ class SessionOrchestrator:
                 perceived_user_tone=(
                     simulation_response.simulation.perceived_user_tone
                 ),
+                current_dynamics=request.current_dynamics,
             )
 
             state_evaluation = await self.state_agent.run(state_request)
@@ -377,6 +387,15 @@ class SessionOrchestrator:
                 delta=state_delta,
             )
 
+            # 新增：把对话氛围与节奏动态指标写回 SessionMessageResponse。
+            self._attach_dynamics_to_response(
+                simulation_response=simulation_response,
+                state_evaluation=state_evaluation,
+            )
+
+            dynamics_update = state_evaluation.dynamics_update
+            updated_dynamics = dynamics_update.updated_dynamics
+
             logger.info(
                 "agent_finished",
                 extra={
@@ -387,6 +406,14 @@ class SessionOrchestrator:
                     "state_delta": state_delta.model_dump(),
                     "risk_flags": risk_flags,
                     "updated_state": simulation_response.updated_state.model_dump(),
+                    "dynamics_delta": dynamics_update.dynamics_delta.model_dump(),
+                    "updated_dynamics": updated_dynamics.model_dump(),
+                    "rhythm_label": updated_dynamics.rhythm_label,
+                    "atmosphere_label": updated_dynamics.atmosphere_label,
+                    "recommended_next_move": updated_dynamics.recommended_next_move,
+                    "control_suggestion_count": len(
+                        dynamics_update.control_suggestions
+                    ),
                 },
             )
 
@@ -437,6 +464,7 @@ class SessionOrchestrator:
                 "scenario": request.scenario,
                 "has_previous_memory": request.memory is not None,
                 "risk_flag_count": len(risk_flags),
+                "has_state_metrics": simulation_response.state_metrics is not None,
             },
         )
 
@@ -520,6 +548,36 @@ class SessionOrchestrator:
 
             return request.memory
 
+    def _attach_dynamics_to_response(
+        self,
+        *,
+        simulation_response: SessionMessageResponse,
+        state_evaluation: StateEvaluationResponse,
+    ) -> None:
+        """
+        把 StateAgent 输出的 dynamics_update 展开到 SessionMessageResponse。
+
+        前端可以：
+        1. 直接展示 state_metrics；
+        2. 下一轮把 state_metrics 作为 current_dynamics 传回；
+        3. 生成报告时累积 state_timeline。
+        """
+
+        dynamics_update = state_evaluation.dynamics_update
+        updated_dynamics = dynamics_update.updated_dynamics
+
+        simulation_response.dynamics_update = dynamics_update
+        simulation_response.state_metrics = updated_dynamics
+
+        simulation_response.rhythm_label = updated_dynamics.rhythm_label
+        simulation_response.atmosphere_label = updated_dynamics.atmosphere_label
+        simulation_response.recommended_next_move = (
+            updated_dynamics.recommended_next_move
+        )
+        simulation_response.control_suggestions = (
+            dynamics_update.control_suggestions or []
+        )
+
     def _should_block(self, safety_result: SafetyCheckResponse) -> bool:
         return (
             not safety_result.allowed
@@ -580,6 +638,21 @@ class SessionOrchestrator:
             updated_state=request.persona.state,
             updated_memory=request.memory,
             safety=safety_result,
+            state_metrics=request.current_dynamics,
+            rhythm_label=(
+                request.current_dynamics.rhythm_label
+                if request.current_dynamics
+                else None
+            ),
+            atmosphere_label=(
+                request.current_dynamics.atmosphere_label
+                if request.current_dynamics
+                else None
+            ),
+            recommended_next_move="pause",
+            control_suggestions=[
+                "当前输入触发安全风险，建议先暂停推进，改用更安全、非施压的表达。"
+            ],
         )
 
     @staticmethod

@@ -1,5 +1,5 @@
 # social-lab/backend/app/agents/prompts.py
-# 2026/07/01
+# 2026/07/16
 
 from __future__ import annotations
 
@@ -477,6 +477,15 @@ STATE_SYSTEM_PROMPT = """
 8. positive_signals 和 negative_signals 必须基于本轮用户表达，不要编造外部事实。
 9. 输出必须严格符合 StateEvaluationResponse JSON Schema。
 10. 不要输出 Markdown，不要输出额外解释文字。
+
+输出要求：
+1. dynamics_delta 表示本轮变化，范围 -15 到 15；
+2. updated_dynamics 表示更新后的当前指标，范围 0 到 100；
+3. 如果用户表达具体但带有催促感，clarity 可以上升，但 pressure_level 和 defensiveness 也应上升；
+4. 如果用户表达礼貌、给选择空间、承担责任，emotional_safety 和 openness 应上升；
+5. 如果用户表达模糊、逃避、重复解释但没有回应对方顾虑，clarity / actionability / openness 应下降；
+6. pacing 不是越高越好，40 到 60 最平衡，70 以上代表推进过急；
+7. control_suggestions 必须给出下一轮如何控制氛围和节奏的建议。
 """.strip()
 
 

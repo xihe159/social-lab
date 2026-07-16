@@ -51,7 +51,10 @@ class ConversationDynamics(BaseModel):
     pace_score: int = Field(
         ge=0,
         le=100,
-        description="当前对话节奏分。越高表示推进速度越合适。",
+        description=(
+            "当前节奏健康度。越高表示推进速度越合适。"
+            "注意：它不是推进速度本身，过快和停滞都会降低该分数。"
+        ),
     )
     pressure_level: int = Field(
         ge=0,
@@ -90,6 +93,30 @@ class ConversationDynamics(BaseModel):
     dynamics_reason: str = Field(description="这些动态指标的主要判断依据")
 
 
+class ConversationDynamicsDelta(BaseModel):
+    """
+    本轮对话对动态指标造成的变化量。
+
+    注意：
+    - 正数表示该指标上升；
+    - 负数表示该指标下降；
+    - pressure_level 上升通常是负面信号；
+    - pace_score 上升表示节奏更健康，不表示推进更快；
+    - 单轮变化应保持保守，避免一轮话导致状态剧烈波动。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    atmosphere_score: int = Field(ge=-15, le=15)
+    pace_score: int = Field(ge=-15, le=15)
+    pressure_level: int = Field(ge=-15, le=15)
+    clarity_score: int = Field(ge=-15, le=15)
+    responsiveness_score: int = Field(ge=-15, le=15)
+    progress_score: int = Field(ge=-15, le=15)
+    repairability_score: int = Field(ge=-15, le=15)
+    boundary_score: int = Field(ge=-15, le=15)
+
+
 class ConversationDynamicsSnapshot(BaseModel):
     """
     写入 Memory 的动态指标快照。
@@ -114,4 +141,53 @@ class ConversationDynamicsSnapshot(BaseModel):
     recommended_next_move: RecommendedNextMove
     reason: str
 
+
+class ConversationDynamicsTrend(BaseModel):
+    """
+    多轮对话后的趋势总结。
+
+    主要给 ReportAgent / AnalysisAgent 使用，
+    用来解释为什么成功率上升或下降。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_turn: int = Field(ge=1, description="趋势起始轮次")
+    end_turn: int = Field(ge=1, description="趋势结束轮次")
+
+    atmosphere_trend: Literal["improving", "stable", "worsening"] = Field(
+        description="对话氛围趋势"
+    )
+    pace_trend: Literal["improving", "stable", "worsening"] = Field(
+        description="节奏健康度趋势"
+    )
+    pressure_trend: Literal["increasing", "stable", "decreasing"] = Field(
+        description="压力水平趋势"
+    )
+    clarity_trend: Literal["improving", "stable", "worsening"] = Field(
+        description="表达清晰度趋势"
+    )
+    progress_trend: Literal["improving", "stable", "worsening"] = Field(
+        description="目标推进趋势"
+    )
+
+    main_dynamic_issue: str = Field(description="当前最主要的氛围或节奏问题")
+    report_summary: str = Field(description="写入复盘报告的趋势摘要")
+
+
+class ConversationDynamicsUpdate(BaseModel):
+    """
+    StateAgent 对本轮动态指标的完整输出。
+
+    这个模型后续可以嵌入 StateEvaluationResponse 中。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dynamics_delta: ConversationDynamicsDelta
+    updated_dynamics: ConversationDynamics
+    control_suggestions: list[str] = Field(
+        default_factory=list,
+        description="下一轮控制对话氛围和节奏的建议",
+    )
 
