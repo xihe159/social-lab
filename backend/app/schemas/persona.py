@@ -1,7 +1,9 @@
-from typing import Literal, List
+from typing import Literal, List, Optional
 from pydantic import BaseModel, Field, ConfigDict
 
 from app.schemas.common import ScenarioKey, RelationshipState
+from app.schemas.chat_record import ChatRecordAnalysis
+from app.schemas.persona_v2 import PersonaModelV2
 
 
 class Persona(BaseModel):
@@ -36,7 +38,7 @@ class PersonaCreateRequest(BaseModel):
     chatLog: str = ""
 
 
-class PersonaCreateResponse(BaseModel):
+class PersonaDraftResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     persona: Persona
@@ -45,3 +47,16 @@ class PersonaCreateResponse(BaseModel):
     evidence: List[PersonaEvidence] = Field(description="画像依据，必须来自用户输入")
     assumptions: List[str] = Field(description="LLM 无法确定但合理假设的内容")
     confidence: float = Field(ge=0, le=1, description="画像可信度")
+
+
+class PersonaCreateResponse(PersonaDraftResponse):
+    """Public response enriched locally after the LLM persona draft."""
+
+    chat_analysis: Optional[ChatRecordAnalysis] = Field(
+        default=None,
+        description="真实聊天记录分析；未上传有效记录时为空",
+    )
+    persona_v2: Optional[PersonaModelV2] = Field(
+        default=None,
+        description="已融合聊天证据的 Persona Model V2",
+    )

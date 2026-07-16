@@ -14,6 +14,11 @@ import {
   createSimulationReport,
   sendSessionMessage,
 } from "@/lib/social-lab-api";
+import type {
+  ChatRecordAnalysis,
+  PersonaModelV2,
+  SimulationContextV2,
+} from "@/lib/social-lab-api";
 import { Sidebar } from "./sidebar";
 import { ChatScreen } from "./screens/chat-screen";
 import { LandingScreen } from "./screens/landing-screen";
@@ -47,6 +52,11 @@ export function SocialLabApp() {
   const [personaLoading, setPersonaLoading] = useState(false);
   const [messageLoading, setMessageLoading] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
+  const [simulationContext, setSimulationContext] =
+    useState<SimulationContextV2 | null>(null);
+  const [conversationEnded, setConversationEnded] = useState(false);
+  const [personaV2, setPersonaV2] = useState<PersonaModelV2 | null>(null);
+  const [chatAnalysis, setChatAnalysis] = useState<ChatRecordAnalysis | null>(null);
 
   const preset = scenarioPresets[scenario];
   const progress = useMemo(() => `${(step / 5) * 100}%`, [step]);
@@ -88,6 +98,10 @@ export function SocialLabApp() {
     setMessages([]);
     setReport(null);
     setRetryDraft("");
+    setSimulationContext(null);
+    setConversationEnded(false);
+    setPersonaV2(null);
+    setChatAnalysis(null);
     setMaxUnlockedStep(1);
     if (openScenario) unlockAndGo(1);
   };
@@ -102,6 +116,14 @@ export function SocialLabApp() {
       setPersonaLoading(true);
       const result = await createPersona(scenario, form);
       setPersona(result.persona);
+      setPersonaV2(result.persona_v2 ?? null);
+      setChatAnalysis(result.chat_analysis ?? null);
+      setSimulationContext({
+        personaId: result.persona_v2?.persona_id ?? `persona_${crypto.randomUUID()}`,
+        sessionId: `session_${crypto.randomUUID()}`,
+        state: null,
+      });
+      setConversationEnded(false);
       // 不让 AI 目标人物先开口
       // 用户应该先输入自己想说的话
       setMessages([]);
@@ -147,9 +169,22 @@ export function SocialLabApp() {
         persona,
         messages,
         text,
+        simulationContext,
+        personaV2,
       );
-      setMessages((current) => [...current, result.targetMessage]);
+      setMessages((current) => {
+        const next = [...current];
+        if (result.targetMessage) next.push(result.targetMessage);
+        if (result.statusMessage) next.push(result.statusMessage);
+        return next;
+      });
       setPersona(result.updatedPersona);
+      setConversationEnded(result.conversationEnded);
+      setSimulationContext((current) =>
+        current
+          ? { ...current, state: result.simulationState }
+          : current,
+      );
     } catch (error) {
       console.error(error);
       showToast(
@@ -200,7 +235,17 @@ export function SocialLabApp() {
   const resetChat = () => {
     setMessages([]);
     setRetryDraft("");
-   };
+    setConversationEnded(false);
+    setSimulationContext((current) =>
+      current
+        ? {
+            ...current,
+            sessionId: `session_${crypto.randomUUID()}`,
+            state: null,
+          }
+        : current,
+    );
+  };
 
   return (
     <div className="app-shell">
@@ -262,6 +307,7 @@ export function SocialLabApp() {
         {step === 3 && persona && (
           <PersonaScreen
             persona={persona}
+            chatAnalysis={chatAnalysis}
             onStart={() => startChat()}
             onTune={() => showToast("画像编辑接口将在下一阶段接入。")}
           />
@@ -277,6 +323,7 @@ export function SocialLabApp() {
             onFinish={finishSimulation}
             isSending={messageLoading}
             isFinishing={reportLoading || messageLoading}
+            conversationEnded={conversationEnded}
           />
         )}
         {step === 5 && report && (

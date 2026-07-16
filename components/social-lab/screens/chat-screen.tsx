@@ -12,6 +12,7 @@ type ChatScreenProps = {
   initialDraft: string;
   isSending: boolean;
   isFinishing: boolean;
+  conversationEnded: boolean;
 };
 
 export function ChatScreen({
@@ -24,6 +25,7 @@ export function ChatScreen({
   initialDraft,
   isSending,
   isFinishing,
+  conversationEnded,
 }: ChatScreenProps) {
   const [draft, setDraft] = useState(initialDraft);
   const chatWindowRef = useRef<HTMLDivElement>(null);
@@ -41,7 +43,7 @@ export function ChatScreen({
 
   const send = () => {
     const value = draft.trim();
-    if (!value || isSending) return;
+    if (!value || isSending || conversationEnded) return;
     onSend(value);
     setDraft("");
   };
@@ -66,11 +68,17 @@ export function ChatScreen({
       <div className="state-chip">对方目前关注：{persona.focus}</div>
 
       <div className="chat-window" ref={chatWindowRef} aria-live="polite">
-        {messages.map((message) => (
-          <p className={`bubble ${message.role}`} key={message.id}>
-            {message.text}
-          </p>
-        ))}
+        {messages.map((message) =>
+          message.role === "system" ? (
+            <p className="chat-status" key={message.id}>
+              {message.text}
+            </p>
+          ) : (
+            <p className={`bubble ${message.role}`} key={message.id}>
+              {message.text}
+            </p>
+          ),
+        )}
       </div>
 
       <div className="composer">
@@ -80,13 +88,15 @@ export function ChatScreen({
           onKeyDown={(event) => {
             if (event.key === "Enter") send();
           }}
-          disabled={isSending || isFinishing}
-          placeholder="输入下一句话..."
+          disabled={isSending || isFinishing || conversationEnded}
+          placeholder={
+            conversationEnded ? "对方已结束本次交流" : "输入下一句话..."
+          }
         />
         <button
           className="send-button"
           onClick={send}
-          disabled={isSending || isFinishing}
+          disabled={isSending || isFinishing || conversationEnded}
           aria-label="发送"
           title="发送"
           type="button"

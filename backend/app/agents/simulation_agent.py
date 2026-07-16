@@ -12,7 +12,7 @@ from app.schemas.session import (
 )
 
 
-class SimulationAgent:
+class SimulationAgentV1:
     """
     SimulationAgent 负责在一次模拟会话中扮演目标人物进行回复。
 
@@ -175,3 +175,8 @@ def apply_state_delta(
         authority=clamp(state.authority + delta.authority, 0, 100),
         emotional=clamp(state.emotional + delta.emotional, -100, 100),
     )
+
+
+# Backwards-compatible public name. Phase 0 keeps every existing import and
+# caller working while the orchestrator moves to the versioned factory.
+SimulationAgent = SimulationAgentV1

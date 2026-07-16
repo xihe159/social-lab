@@ -8,7 +8,72 @@ from app.schemas.persona import (
     Persona,
     PersonaEvidence,
     PersonaCreateRequest,
+    PersonaDraftResponse,
     PersonaCreateResponse,
+)
+
+from app.schemas.persona_v2 import (
+    BasicProfile,
+    StableTraits,
+    CommunicationStyle,
+    DyadicProfile,
+    BehaviorPattern,
+    EvidenceSummary,
+    PersonaModelV2,
+)
+
+from app.schemas.chat_record import (
+    NormalizedChatMessage,
+    ConversationEpisode,
+    ChatRecordFact,
+    ChatEvidence,
+    RelationshipCharacteristics,
+    ChatRecordAnalysis,
+)
+
+from app.schemas.evidence_retrieval import (
+    RetrievalQuery,
+    RetrievedEvidence,
+    EvidenceRetrievalResult,
+    SessionEvidenceMeta,
+)
+
+from app.schemas.consistency_evaluation import (
+    ConsistencyScores,
+    ConsistencyIssue,
+    ConsistencyEvaluationInput,
+    ConsistencyEvaluationOutput,
+    EvaluatorTriggerResult,
+    SessionEvaluationMeta,
+)
+
+from app.schemas.simulation_turn import (
+    SessionRuntimeMeta,
+    SafeTurnAnalysis,
+    SimulationTurnRecord,
+)
+
+from app.schemas.simulation_state import (
+    RelationshipStateV2,
+    EmotionalState,
+    ConversationState,
+    SimulationState,
+)
+
+from app.schemas.simulation_decision import (
+    DecisionMessage,
+    TurnDecisionInput,
+    BehaviorSignals,
+    TurnAnalysis,
+    SimulationStateDelta,
+    ResponsePolicy,
+    TurnDecisionOutput,
+    TurnDecisionResult,
+)
+
+from app.schemas.simulation_generation import (
+    ResponseGenerationInput,
+    GeneratedResponse,
 )
 
 from app.schemas.memory import (
@@ -22,6 +87,7 @@ from app.schemas.session import (
     StateDelta,
     SessionMessageRequest,
     SimulationReply,
+    SessionActionResponse,
     SessionMessageResponse,
 )
 
@@ -63,7 +129,56 @@ __all__ = [
     "Persona",
     "PersonaEvidence",
     "PersonaCreateRequest",
+    "PersonaDraftResponse",
     "PersonaCreateResponse",
+
+    "BasicProfile",
+    "StableTraits",
+    "CommunicationStyle",
+    "DyadicProfile",
+    "BehaviorPattern",
+    "EvidenceSummary",
+    "PersonaModelV2",
+
+    "NormalizedChatMessage",
+    "ConversationEpisode",
+    "ChatRecordFact",
+    "ChatEvidence",
+    "RelationshipCharacteristics",
+    "ChatRecordAnalysis",
+
+    "RetrievalQuery",
+    "RetrievedEvidence",
+    "EvidenceRetrievalResult",
+    "SessionEvidenceMeta",
+
+    "ConsistencyScores",
+    "ConsistencyIssue",
+    "ConsistencyEvaluationInput",
+    "ConsistencyEvaluationOutput",
+    "EvaluatorTriggerResult",
+    "SessionEvaluationMeta",
+
+    "SessionRuntimeMeta",
+    "SafeTurnAnalysis",
+    "SimulationTurnRecord",
+
+    "RelationshipStateV2",
+    "EmotionalState",
+    "ConversationState",
+    "SimulationState",
+
+    "DecisionMessage",
+    "TurnDecisionInput",
+    "BehaviorSignals",
+    "TurnAnalysis",
+    "SimulationStateDelta",
+    "ResponsePolicy",
+    "TurnDecisionOutput",
+    "TurnDecisionResult",
+
+    "ResponseGenerationInput",
+    "GeneratedResponse",
 
     "SessionMemory",
     "MemoryUpdateRequest",
@@ -73,6 +188,7 @@ __all__ = [
     "StateDelta",
     "SessionMessageRequest",
     "SimulationReply",
+    "SessionActionResponse",
     "SessionMessageResponse",
 
     "StateEvaluateRequest",

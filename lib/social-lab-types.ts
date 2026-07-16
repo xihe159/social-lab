@@ -48,7 +48,7 @@ export type FormData = {
 
 export type ChatMessage = {
   id: string;
-  role: "user" | "target";
+  role: "user" | "target" | "system";
   text: string;
 };
 

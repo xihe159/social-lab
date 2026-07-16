@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 from typing import Any
+from hashlib import sha256
 
 from app.agents.prompts import PERSONA_SYSTEM_PROMPT, build_persona_user_prompt
 from app.llm.client import generate_structured
 from app.schemas.persona import (
     PersonaCreateRequest,
     PersonaCreateResponse,
+    PersonaDraftResponse,
     PersonaEvidence,
 )
+from app.services.chat_record_analyzer import ChatRecordAnalyzer
+from app.services.persona_v2_adapter import compile_legacy_persona
+from app.services.evidence_store import persona_evidence_repository
 
 
 class PersonaAgent:
@@ -34,11 +39,12 @@ class PersonaAgent:
 
         payload = request.model_dump()
 
-        result = await generate_structured(
+        draft = await generate_structured(
             system_prompt=PERSONA_SYSTEM_PROMPT,
             user_prompt=build_persona_user_prompt(payload),
-            output_model=PersonaCreateResponse,
+            output_model=PersonaDraftResponse,
         )
+        result = PersonaCreateResponse(**draft.model_dump())
 
         return self.post_process(result=result, request=request)
 
@@ -65,8 +71,54 @@ class PersonaAgent:
         self._normalize_evidence(result, request)
         self._normalize_assumptions(result, request)
         self._normalize_confidence(result, request)
+        self._compile_persona_v2(result, request)
 
         return result
+
+    def _compile_persona_v2(
+        self,
+        result: PersonaCreateResponse,
+        request: PersonaCreateRequest,
+    ) -> None:
+        """Run the Phase 5 chat pipeline and compile evidence into Persona V2."""
+
+        persona_id = self._stable_persona_id(result, request)
+        base = compile_legacy_persona(
+            result.persona,
+            persona_id=persona_id,
+            role=request.role,
+            relation=request.relation,
+            scenario=request.scenario,
+            evidence_count=len(result.evidence),
+            chat_record_available=False,
+            confidence=result.confidence,
+        )
+        analyzer = ChatRecordAnalyzer()
+        analysis = analyzer.analyze(
+            request.chatLog,
+            target_role=request.role,
+            relation=request.relation,
+            persona=base,
+        )
+        result.chat_analysis = analysis
+        result.persona_v2 = analyzer.compile_persona(base, analysis) if analysis else base
+        if analysis is not None:
+            persona_evidence_repository.register(persona_id, analysis)
+
+    @staticmethod
+    def _stable_persona_id(
+        result: PersonaCreateResponse,
+        request: PersonaCreateRequest,
+    ) -> str:
+        source = "|".join(
+            (
+                result.persona.title,
+                request.role.strip(),
+                request.relation.strip(),
+                request.chatLog.strip(),
+            )
+        )
+        return f"persona_{sha256(source.encode('utf-8')).hexdigest()[:16]}"
 
     def _normalize_persona_text_fields(self, result: PersonaCreateResponse) -> None:
         persona = result.persona

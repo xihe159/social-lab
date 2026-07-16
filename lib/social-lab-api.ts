@@ -17,14 +17,90 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 90_000;
 const REPORT_REQUEST_TIMEOUT_MS = 180_000;
 
 type BackendChatMessage = {
-  role: "user" | "target";
+  role: "user" | "target" | "system";
   content: string;
+};
+
+export type ResponseAction =
+  | "REPLY_NORMAL"
+  | "REPLY_BRIEF"
+  | "REPLY_COLD"
+  | "ASK_CLARIFICATION"
+  | "SET_BOUNDARY"
+  | "CONFRONT"
+  | "DEFER_REPLY"
+  | "READ_NO_REPLY"
+  | "END_CONVERSATION";
+
+export type SessionActionResponse = {
+  action: ResponseAction;
+  text: string;
+  status_text: string;
+  conversation_ended: boolean;
 };
 
 export type PersonaEvidence = {
   source: "goal" | "outcome" | "role" | "relation" | "habit" | "chatLog";
   quote: string;
   inference: string;
+};
+
+export type CommunicationStyleV2 = {
+  average_reply_length: "short" | "medium" | "long";
+  formality: number;
+  emoji_frequency: number;
+  question_frequency: number;
+  uses_periods: boolean;
+  uses_multiple_messages: boolean;
+  typical_openings: string[];
+  typical_closings: string[];
+  preferred_sentence_patterns: string[];
+};
+
+export type BehaviorPatternV2 = {
+  pattern_id: string;
+  trigger: { user_behavior: string[]; context: string[] };
+  observed_response: {
+    reply_length_change: string;
+    warmth_change: string;
+    directness_change: string;
+  };
+  inferred_tendency: string;
+  confidence: number;
+  evidence_ids: string[];
+  counter_evidence_ids: string[];
+};
+
+export type ChatRecordAnalysis = {
+  communication_style: CommunicationStyleV2;
+  behavior_patterns: BehaviorPatternV2[];
+  relationship_characteristics: {
+    user_initiative: number;
+    target_initiative: number;
+    target_decision_power: number;
+    communication_distance: number;
+    expectation: number;
+    trust: number;
+    warmth: number;
+    summary: string[];
+  };
+  confidence: number;
+  uncertainty_notes: string[];
+};
+
+export type PersonaModelV2 = {
+  persona_id: string;
+  basic_profile: Record<string, string>;
+  stable_traits: Record<string, number>;
+  communication_style: CommunicationStyleV2;
+  dyadic_profile: Record<string, number>;
+  behavior_patterns: BehaviorPatternV2[];
+  evidence_summary: {
+    evidence_count: number;
+    chat_record_available: boolean;
+    overall_confidence: number;
+  };
+  version: "2.0";
 };
 
 export type PersonaCreateResponse = {
@@ -34,6 +110,8 @@ export type PersonaCreateResponse = {
   evidence: PersonaEvidence[];
   assumptions: string[];
   confidence: number;
+  chat_analysis?: ChatRecordAnalysis | null;
+  persona_v2?: PersonaModelV2 | null;
 };
 
 export type StateDelta = {
@@ -58,6 +136,68 @@ export type SessionMessageResponse = {
   target_message: BackendChatMessage;
   simulation: SimulationReply;
   updated_state: Persona["state"];
+  response?: SessionActionResponse | null;
+  simulation_state?: SimulationStateV2 | null;
+  evidence_meta?: {
+    retrieval_mode: string;
+    evidence_ids: string[];
+    episode_ids: string[];
+    relevance_scores: number[];
+  } | null;
+  evaluation_meta?: {
+    evaluated: boolean;
+    trigger_reasons: string[];
+    result: {
+      pass: boolean;
+      scores: Record<string, number>;
+      issues: Array<{
+        dimension: string;
+        severity: string;
+        message: string;
+        retry_instruction: string;
+      }>;
+    } | null;
+    retry_count: number;
+    evaluator_failed: boolean;
+  } | null;
+  runtime_meta?: {
+    decision_fallback_used: boolean;
+    generator_retry_count: number;
+    generator_fallback_used: boolean;
+  } | null;
+};
+
+export type SimulationStateV2 = {
+  session_id: string;
+  persona_id: string;
+  relationship_state: {
+    trust: number;
+    respect: number;
+    warmth: number;
+    patience: number;
+    psychological_safety: number;
+    willingness_to_engage: number;
+  };
+  emotional_state: {
+    irritation: number;
+    hurt: number;
+    anxiety: number;
+    defensiveness: number;
+    fatigue: number;
+  };
+  conversation_state: {
+    turn_count: number;
+    conflict_level: number;
+    topic_resolution: number;
+    boundary_pressure: number;
+  };
+  version: "2.0";
+};
+
+export type SimulationContextV2 = {
+  personaId: string;
+  sessionId: string;
+  state: SimulationStateV2 | null;
 };
 
 type ReportResponse = {
@@ -155,10 +295,16 @@ export async function sendSessionMessage(
   persona: Persona,
   messages: ChatMessage[],
   userMessage: string,
+  simulationContext?: SimulationContextV2 | null,
+  personaV2?: PersonaModelV2 | null,
 ): Promise<{
-  targetMessage: ChatMessage;
+  targetMessage: ChatMessage | null;
+  statusMessage: ChatMessage | null;
+  action: ResponseAction;
+  conversationEnded: boolean;
   simulation: SimulationReply;
   updatedPersona: Persona;
+  simulationState: SimulationStateV2 | null;
 }> {
   const result = await requestJson<SessionMessageResponse>(
     "/api/session/message",
@@ -166,19 +312,39 @@ export async function sendSessionMessage(
       scenario,
       goal: form.goal,
       outcome: form.outcome,
+      role: form.role,
+      relation: form.relation,
       persona,
+      persona_v2: personaV2,
       messages: toBackendMessages(messages),
       user_message: userMessage,
+      persona_id: simulationContext?.personaId,
+      session_id: simulationContext?.sessionId,
+      simulation_state: simulationContext?.state,
     },
   );
 
+  const action = result.response?.action ?? "REPLY_NORMAL";
+  const responseText = result.response?.text ?? result.target_message.content;
+  const statusText =
+    result.response?.status_text ??
+    (result.target_message.role === "system" ? result.target_message.content : "");
+
   return {
-    targetMessage: toFrontendMessage(result.target_message),
+    targetMessage: responseText
+      ? toFrontendMessage({ role: "target", content: responseText })
+      : null,
+    statusMessage: statusText
+      ? toFrontendMessage({ role: "system", content: statusText })
+      : null,
+    action,
+    conversationEnded: result.response?.conversation_ended ?? false,
     simulation: result.simulation,
     updatedPersona: {
       ...persona,
       state: result.updated_state,
     },
+    simulationState: result.simulation_state ?? null,
   };
 }
 

@@ -1,10 +1,13 @@
 import os
-import json
 from typing import Type, TypeVar
 
 from dotenv import load_dotenv
 from openai import AsyncOpenAI, OpenAIError
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
+from app.llm.structured_output import (
+    StructuredOutputRepairError,
+    validate_with_single_repair,
+)
 
 
 load_dotenv()
@@ -246,13 +249,41 @@ async def generate_structured(
     if not content:
         raise LLMClientError("LLM 结构化返回内容为空。")
 
+    async def repair_once(malformed_content: str) -> str:
+        # Phase 8 reliability contract: exactly one structured JSON repair.
+        # The malformed content is sent back to the same configured provider but
+        # is never included in application logs or the final exception message.
+        repair_prompt = (
+            "请修复下面的模型输出，使其严格符合指定 JSON Schema。"
+            "不得增加解释、Markdown 或 Schema 外字段，只返回修复后的 JSON。\n\n"
+            f"待修复输出：\n{malformed_content}"
+        )
+        try:
+            repaired_response = await client.chat.completions.create(
+                model=LLM_MODEL_ID,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "你是结构化 JSON 修复器，只修复格式和字段合法性。",
+                    },
+                    {"role": "user", "content": repair_prompt},
+                ],
+                temperature=0,
+                response_format=_build_json_schema_response_format(output_model),
+            )
+        except OpenAIError as repair_error:
+            raise LLMClientError("LLM JSON repair 请求失败。") from repair_error
+
+        repaired_content = repaired_response.choices[0].message.content
+        if not repaired_content:
+            raise LLMClientError("LLM JSON repair 返回内容为空。")
+        return repaired_content
+
     try:
-        return output_model.model_validate_json(content)
-    except ValidationError as exc:
-        raise LLMClientError(
-            f"LLM 返回内容未通过 Pydantic 校验：{exc}\n原始返回：{content}"
-        ) from exc
-    except json.JSONDecodeError as exc:
-        raise LLMClientError(
-            f"LLM 返回内容不是合法 JSON：{exc}\n原始返回：{content}"
-        ) from exc
+        return await validate_with_single_repair(
+            content=content,
+            output_model=output_model,
+            repair=repair_once,
+        )
+    except StructuredOutputRepairError as exc:
+        raise LLMClientError("LLM 结构化输出在一次 JSON repair 后仍未通过校验。") from exc

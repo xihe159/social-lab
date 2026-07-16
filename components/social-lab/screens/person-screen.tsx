@@ -59,7 +59,7 @@ export function PersonScreen({
           <textarea
             value={form.chatLog}
             onChange={(event) => onFormChange({ chatLog: event.target.value })}
-            placeholder="可以粘贴微信、邮件或短信片段。建议先删除姓名、电话等隐私信息。"
+            placeholder={"请保留说话人，例如：\n我：老师，能否请您帮我看看？\n导师：可以，先把材料发来。\n\n建议先删除姓名、电话等隐私信息。"}
           />
         </label>
       </div>

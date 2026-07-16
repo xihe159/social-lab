@@ -958,6 +958,18 @@ textarea:focus {
   box-shadow: 0 8px 18px rgba(177, 229, 93, 0.18);
 }
 
+.chat-status {
+  align-self: center;
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: #eef1f6;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+}
+
 .composer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 46px;
@@ -1561,4 +1573,68 @@ textarea,
 
 .persona-screen .strategy-box b {
   font-size: 20px;
+}
+
+.chat-analysis-card {
+  margin-top: 24px;
+}
+
+.chat-analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.chat-analysis-grid > div {
+  padding: 16px;
+  border-radius: 14px;
+  background: #f5f7f2;
+}
+
+.chat-analysis-grid small,
+.behavior-patterns > small {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--muted);
+}
+
+.chat-analysis-grid b {
+  line-height: 1.6;
+}
+
+.chat-analysis-grid ul {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.7;
+}
+
+.behavior-patterns {
+  margin-top: 18px;
+}
+
+.behavior-patterns > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.behavior-patterns span {
+  padding: 7px 11px;
+  border: 1px solid #d9e1d4;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+}
+
+.analysis-note {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+@media (max-width: 720px) {
+  .chat-analysis-grid {
+    grid-template-columns: 1fr;
+  }
 }

@@ -16,6 +16,8 @@ https://xihe159.github.io/social-lab/
 - Goal, expected outcome, target-person profile, relationship, habit, and chat-log input
 - AI-generated Persona Card and Relationship State
 - AI target-person replies through the backend session API
+- SimulationAgent V2 decision, dynamic state, response actions, evidence retrieval, and conditional consistency evaluation
+- Real chat analysis for communication style, relationship characteristics, behavior patterns, and confidence
 - AI communication report with success probability, risks, improvement factors, and rewrite suggestion
 - Copy-ready rewrite and retry flow
 
@@ -89,17 +91,21 @@ Start the frontend:
 npm run dev
 ```
 
-Because the project is configured for GitHub Pages, open:
+In local development, open:
 
 ```text
-http://localhost:3000/social-lab/
+http://127.0.0.1:3000/
 ```
+
+The `/social-lab/` base path is applied only to production builds for GitHub Pages.
 
 Run checks:
 
 ```bash
 npm run lint
 npm run build
+cd backend
+python -m unittest discover -s tests -v
 ```
 
 ## Backend Development
@@ -117,6 +123,7 @@ Create `backend/.env`:
 LLM_API_KEY=your_api_key
 LLM_BASE_URL=https://your-openai-compatible-base-url
 LLM_MODEL_ID=your_model_id
+SIMULATION_AGENT_VERSION=v1
 ```
 
 Start the backend:
@@ -177,7 +184,13 @@ Add Render environment variables:
 LLM_API_KEY
 LLM_BASE_URL
 LLM_MODEL_ID
+SIMULATION_AGENT_VERSION=v1
 ```
+
+`SIMULATION_AGENT_VERSION` defaults to `v1`. Set it to `v2` to enable the
+full V2 pipeline. Switching the value back to `v1` provides an immediate
+rollback to the original SimulationAgent. Before enabling V2 in production,
+run the staging quality gates in `docs/SIMULATION_AGENT_V2_QUALITY_BASELINE.md`.
 
 After deployment, copy the Render service URL and set it as the GitHub repository variable `NEXT_PUBLIC_AGENT_API_BASE_URL`.
 

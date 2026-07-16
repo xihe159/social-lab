@@ -8,7 +8,8 @@ import time
 from uuid import uuid4
 
 from app.agents.memory_agent import MemoryAgent
-from app.agents.simulation_agent import SimulationAgent, apply_state_delta
+from app.agents.simulation_agent import apply_state_delta
+from app.agents.simulation_agent_factory import create_simulation_agent
 from app.agents.state_agent import StateAgent
 from app.agents.safety_agent import SafetyAgent
 
@@ -45,9 +46,12 @@ class SessionOrchestrator:
     - MemoryAgent 是增强模块，失败时回退到上一轮 memory。
     """
 
-    def __init__(self):
+    def __init__(self, simulation_agent_version: str | None = None):
         self.safety_agent = SafetyAgent()
-        self.simulation_agent = SimulationAgent()
+        (
+            self.simulation_agent_version,
+            self.simulation_agent,
+        ) = create_simulation_agent(simulation_agent_version)
         self.state_agent = StateAgent()
         self.memory_agent = MemoryAgent()
 
@@ -61,6 +65,7 @@ class SessionOrchestrator:
                     "StateAgent",
                     "MemoryAgent",
                 ],
+                "simulation_agent_version": self.simulation_agent_version,
             },
         )
 
@@ -138,14 +143,24 @@ class SessionOrchestrator:
         state_delta = simulation_response.simulation.state_delta
         risk_flags = simulation_response.simulation.risk_flags
 
-        state_delta, risk_flags = await self._run_state_agent_with_fallback(
-            trace_id=trace_id,
-            request=request,
-            simulation_response=simulation_response,
-            fallback_state_delta=state_delta,
-            fallback_risk_flags=risk_flags,
-            safety_result=safety_result,
-        )
+        if self.simulation_agent_version == "v1":
+            state_delta, risk_flags = await self._run_state_agent_with_fallback(
+                trace_id=trace_id,
+                request=request,
+                simulation_response=simulation_response,
+                fallback_state_delta=state_delta,
+                fallback_risk_flags=risk_flags,
+                safety_result=safety_result,
+            )
+        else:
+            logger.info(
+                "agent_skipped",
+                extra={
+                    "trace_id": trace_id,
+                    "agent": "StateAgent",
+                    "reason": "v2_decision_engine_already_updated_state",
+                },
+            )
 
         simulation_response.updated_memory = await self._run_memory_agent_with_fallback(
             trace_id=trace_id,
@@ -241,6 +256,7 @@ class SessionOrchestrator:
             extra={
                 "trace_id": trace_id,
                 "agent": "SimulationAgent",
+                "simulation_agent_version": self.simulation_agent_version,
                 "scenario": request.scenario,
                 "message_count": len(request.messages),
                 "has_memory": request.memory is not None,
@@ -248,6 +264,8 @@ class SessionOrchestrator:
         )
 
         simulation_response = await self.simulation_agent.run(request)
+        evaluation_meta = simulation_response.evaluation_meta
+        runtime_meta = simulation_response.runtime_meta
 
         # 把 SafetyAgent 的检查结果合并进主响应。
         simulation_response.safety = safety_result
@@ -263,6 +281,7 @@ class SessionOrchestrator:
             extra={
                 "trace_id": trace_id,
                 "agent": "SimulationAgent",
+                "simulation_agent_version": self.simulation_agent_version,
                 "duration_ms": self._elapsed_ms(agent_started_at),
                 "reply_length": len(simulation_response.target_message.content),
                 "attitude": simulation_response.simulation.attitude,
@@ -273,6 +292,29 @@ class SessionOrchestrator:
                 "state_delta": simulation_response.simulation.state_delta.model_dump(),
                 "risk_flags": simulation_response.simulation.risk_flags,
                 "updated_state": simulation_response.updated_state.model_dump(),
+                "consistency_evaluated": bool(
+                    evaluation_meta and evaluation_meta.evaluated
+                ),
+                "consistency_passed": (
+                    evaluation_meta.result.passed
+                    if evaluation_meta and evaluation_meta.result
+                    else None
+                ),
+                "consistency_retry_count": (
+                    evaluation_meta.retry_count if evaluation_meta else 0
+                ),
+                "consistency_evaluator_failed": bool(
+                    evaluation_meta and evaluation_meta.evaluator_failed
+                ),
+                "decision_fallback_used": bool(
+                    runtime_meta and runtime_meta.decision_fallback_used
+                ),
+                "generator_retry_count": (
+                    runtime_meta.generator_retry_count if runtime_meta else 0
+                ),
+                "generator_fallback_used": bool(
+                    runtime_meta and runtime_meta.generator_fallback_used
+                ),
             },
         )
 
