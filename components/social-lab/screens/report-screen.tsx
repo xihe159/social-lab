@@ -1,5 +1,7 @@
 import { Copy, RefreshCw } from "lucide-react";
+
 import type { CSSProperties } from "react";
+
 import type { SimulationReport } from "@/lib/social-lab-types";
 
 type ReportScreenProps = {
@@ -31,10 +33,15 @@ export function ReportScreen({
             <span>可能结果</span>
             <small>模拟分布</small>
           </div>
+
           <div className="outcome-list">
             {report.outcomes.map((outcome) => (
-              <div className="outcome-row" key={outcome.label}>
+              <div
+                className="outcome-row"
+                key={outcome.label}
+              >
                 <span>{outcome.label}</span>
+
                 <div className="outcome-bar">
                   <span
                     style={
@@ -45,6 +52,7 @@ export function ReportScreen({
                     }
                   />
                 </div>
+
                 <b>{outcome.value}%</b>
               </div>
             ))}
@@ -53,6 +61,7 @@ export function ReportScreen({
 
         <article className="card-block yellow-note">
           <h3>主要影响因素</h3>
+
           <ul>
             {report.factors.map((factor) => (
               <li key={factor}>{factor}</li>
@@ -61,17 +70,37 @@ export function ReportScreen({
         </article>
 
         <article className="card-block rewrite-card">
-          <h3>推荐改写</h3>
-          <p>{report.rewrite}</p>
-          <button className="secondary-action" onClick={onCopy} type="button">
-            <Copy size={17} /> 复制优化表达
+          <h3>下一步与推荐改写</h3>
+
+          <div className="rewrite-step">
+            <strong>下一步行动</strong>
+            <p>{report.nextStepAdvice}</p>
+          </div>
+
+          <div className="rewrite-content">
+            <strong>推荐表达</strong>
+            <p>{report.rewrite}</p>
+          </div>
+
+          <button
+            className="secondary-action"
+            onClick={onCopy}
+            type="button"
+          >
+            <Copy size={17} />
+            复制推荐表达
           </button>
         </article>
       </div>
 
       <div className="footer-actions">
-        <button className="primary-action" onClick={onRetry} type="button">
-          用这个版本重新模拟 <RefreshCw size={18} />
+        <button
+          className="primary-action"
+          onClick={onRetry}
+          type="button"
+        >
+          用这个版本重新模拟
+          <RefreshCw size={18} />
         </button>
       </div>
     </section>
