@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from uuid import uuid4
 
 from app.agents.memory_agent import MemoryAgent
@@ -62,7 +63,9 @@ class SessionOrchestrator:
                 "service": "SessionOrchestrator",
                 "agents": [
                     "SafetyAgent",
+                    "StrategyAgentV2(active inside SimulationAgentV2)",
                     "SimulationAgent",
+                    "EvaluationAgentV2(bounded feedback inside SimulationAgentV2)",
                     "StateAgent",
                     "MemoryAgent",
                 ],
@@ -73,6 +76,8 @@ class SessionOrchestrator:
     async def handle_message(
         self,
         request: SessionMessageRequest,
+        *,
+        defer_background: Callable[..., None] | None = None,
     ) -> SessionMessageResponse:
         """
         处理一轮用户消息，并返回目标人物回复、状态变化、动态指标、记忆更新和安全检查结果。
@@ -140,6 +145,7 @@ class SessionOrchestrator:
             trace_id=trace_id,
             request=request,
             safety_result=safety_result,
+            defer_background=defer_background,
         )
 
         # 先保留 SimulationAgent 的初始状态判断，作为 StateAgent 失败时的兜底。
@@ -161,7 +167,7 @@ class SessionOrchestrator:
                 extra={
                     "trace_id": trace_id,
                     "agent": "StateAgent",
-                    "reason": "v2_decision_engine_already_updated_state",
+                    "reason": "v2_strategy_policy_adapter_already_updated_state",
                 },
             )
 
@@ -255,6 +261,7 @@ class SessionOrchestrator:
         trace_id: str,
         request: SessionMessageRequest,
         safety_result: SafetyCheckResponse,
+        defer_background: Callable[..., None] | None = None,
     ) -> SessionMessageResponse:
         agent_started_at = time.perf_counter()
 
@@ -271,9 +278,16 @@ class SessionOrchestrator:
             },
         )
 
-        simulation_response = await self.simulation_agent.run(request)
+        if self.simulation_agent_version == "v2":
+            simulation_response = await self.simulation_agent.run(
+                request,
+                defer_background=defer_background,
+            )
+        else:
+            simulation_response = await self.simulation_agent.run(request)
         evaluation_meta = simulation_response.evaluation_meta
         runtime_meta = simulation_response.runtime_meta
+        strategy_meta = simulation_response.strategy_meta
 
         # 把 SafetyAgent 的检查结果合并进主响应。
         simulation_response.safety = safety_result
@@ -300,28 +314,84 @@ class SessionOrchestrator:
                 "state_delta": simulation_response.simulation.state_delta.model_dump(),
                 "risk_flags": simulation_response.simulation.risk_flags,
                 "updated_state": simulation_response.updated_state.model_dump(),
-                "consistency_evaluated": bool(
+                "simulation_evaluated": bool(
                     evaluation_meta and evaluation_meta.evaluated
                 ),
-                "consistency_passed": (
-                    evaluation_meta.result.passed
-                    if evaluation_meta and evaluation_meta.result
+                "initial_evaluation_score": (
+                    evaluation_meta.initial_score if evaluation_meta else None
+                ),
+                "final_evaluation_score": (
+                    evaluation_meta.final_score if evaluation_meta else None
+                ),
+                "evaluation_score_delta": (
+                    evaluation_meta.score_delta if evaluation_meta else None
+                ),
+                "evaluation_verdict": (
+                    evaluation_meta.final_verdict.value
+                    if evaluation_meta and evaluation_meta.final_verdict
                     else None
                 ),
-                "consistency_retry_count": (
+                "failure_attribution": (
+                    evaluation_meta.final_failure_attribution.value
+                    if evaluation_meta
+                    and evaluation_meta.final_failure_attribution
+                    else None
+                ),
+                "feedback_action": (
+                    evaluation_meta.feedback_action.value
+                    if evaluation_meta
+                    else "none"
+                ),
+                "feedback_retry_count": (
                     evaluation_meta.retry_count if evaluation_meta else 0
                 ),
-                "consistency_evaluator_failed": bool(
+                "evaluation_agent_failed": bool(
                     evaluation_meta and evaluation_meta.evaluator_failed
+                ),
+                "final_evaluation_failed": bool(
+                    evaluation_meta and evaluation_meta.final_evaluator_failed
                 ),
                 "decision_fallback_used": bool(
                     runtime_meta and runtime_meta.decision_fallback_used
+                ),
+                "strategy_policy_id": (
+                    strategy_meta.policy_id if strategy_meta else None
+                ),
+                "strategy_action": (
+                    strategy_meta.strategy_action if strategy_meta else None
+                ),
+                "strategy_confidence": (
+                    strategy_meta.confidence if strategy_meta else None
+                ),
+                "strategy_fallback_used": bool(
+                    runtime_meta and runtime_meta.strategy_fallback_used
                 ),
                 "generator_retry_count": (
                     runtime_meta.generator_retry_count if runtime_meta else 0
                 ),
                 "generator_fallback_used": bool(
                     runtime_meta and runtime_meta.generator_fallback_used
+                ),
+                "evaluation_call_count": (
+                    runtime_meta.evaluation_call_count if runtime_meta else 0
+                ),
+                "evaluation_execution_mode": (
+                    evaluation_meta.execution_mode if evaluation_meta else "not_run"
+                ),
+                "evaluation_background_scheduled": bool(
+                    evaluation_meta and evaluation_meta.background_scheduled
+                ),
+                "evaluation_critical_reasons": (
+                    evaluation_meta.critical_reasons if evaluation_meta else []
+                ),
+                "strategy_replan_count": (
+                    runtime_meta.strategy_replan_count if runtime_meta else 0
+                ),
+                "simulation_revision_count": (
+                    runtime_meta.simulation_revision_count if runtime_meta else 0
+                ),
+                "rejected_candidate_discarded": bool(
+                    runtime_meta and runtime_meta.rejected_candidate_discarded
                 ),
             },
         )
