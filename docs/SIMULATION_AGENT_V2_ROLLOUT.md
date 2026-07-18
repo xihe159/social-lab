@@ -39,10 +39,6 @@ request schema, response schema, or stored data migration is required.
 
 ## Phase 2 turn decision engine
 
-> 2026-07-17 integration update: TargetResponseStrategyAgent now owns the active
-> Response Policy. The original Turn Decision Engine remains only as a historical
-> regression reference and is no longer wired into SimulationAgentV2.
-
 - One structured model call produces turn analysis, state delta, and response
   policy; it does not generate final reply text.
 - Normal-turn deltas are clamped to +/-0.15. Only recognized severe events can
@@ -54,15 +50,15 @@ request schema, response schema, or stored data migration is required.
 
 ## Phase 3 response generation and integration
 
-- V2 now runs StrategyAgent followed by Response Generator.
+- V2 now runs Decision Engine followed by Response Generator.
 - The generator must preserve the selected action and applies response-length
   limits after structured output validation.
 - `/api/session/message` keeps its existing visible reply contract and adds an
   optional V2 state snapshot for transparent multi-turn continuity.
 - The frontend carries anonymous persona/session IDs and the V2 state without
   changing the chat UI.
-- StateAgent is skipped for V2 because the Strategy Policy adapter already owns
-  conservative state updates; V1 orchestration is unchanged.
+- StateAgent is skipped for V2 because the Decision Engine already owns state
+  updates; V1 orchestration is unchanged.
 
 ## Phase 4 response actions and no-reply behavior
 
@@ -102,9 +98,9 @@ request schema, response schema, or stored data migration is required.
   delay Episodes over unrelated interactions.
 - Records with fewer than three Episodes fall back to the summarized Persona to
   avoid overfitting sparse evidence.
-- Context Builder injects selected target-language Episode samples into Response
-  Generator. Strategy consumes the Persona snapshot, behavior patterns and
-  Session Memory; the full chat log is never sent to either model on every turn.
+- Context Builder injects selected Episode context into Turn Decision and only
+  target-language samples into Response Generator. The full chat log is never
+  sent to either model on every turn.
 - `/api/session/message` exposes evidence IDs, Episode IDs, retrieval mode, and
   scores for debugging without returning raw historical chat in metadata.
 
@@ -141,12 +137,3 @@ request schema, response schema, or stored data migration is required.
   quality and latency measurement.
 - Local development uses `/`; production builds retain `/social-lab/` for GitHub
   Pages.
-
-## Strategy / Evaluation V2 ownership update
-
-- StrategyAgent is the only active Response Policy owner; TurnDecisionEngine is
-  retained only for historical regression coverage.
-- EvaluationAgent V2 is the only active semantic quality evaluator in the V2
-  main path; the legacy ConsistencyEvaluator is not imported or called there.
-- Feedback is bounded to one Strategy replan or one Simulation regeneration.
-  Only the final candidate reaches the Turn Store and MemoryAgent.

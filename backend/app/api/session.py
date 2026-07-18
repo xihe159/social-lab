@@ -1,13 +1,11 @@
 # social-lab/backend/app/api/session.py
 # 2026/07/01
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from app.services.session_orchestrator import SessionOrchestrator
 from app.llm.client import LLMClientError
 from app.schemas.session import SessionMessageRequest, SessionMessageResponse
-from app.schemas.runtime_metrics import RuntimeMetricsSnapshot
-from app.services.agent_runtime_metrics import agent_runtime_metrics_store
 
 
 router = APIRouter(prefix="/api/session", tags=["session"])
@@ -15,10 +13,7 @@ router = APIRouter(prefix="/api/session", tags=["session"])
 orchestrator = SessionOrchestrator()
 
 @router.post("/message", response_model=SessionMessageResponse)
-async def send_message(
-    request: SessionMessageRequest,
-    background_tasks: BackgroundTasks,
-) -> SessionMessageResponse:
+async def send_message(request: SessionMessageRequest) -> SessionMessageResponse:
     """
     发送一轮模拟对话。
 
@@ -29,10 +24,7 @@ async def send_message(
     """
 
     try:
-        return await orchestrator.handle_message(
-            request,
-            defer_background=background_tasks.add_task,
-        )
+        return await orchestrator.handle_message(request)
     except LLMClientError as exc:
         raise HTTPException(
             status_code=502,
@@ -43,10 +35,3 @@ async def send_message(
             status_code=500,
             detail=f"SessionOrchestrator 处理失败：{exc}",
         ) from exc
-
-
-@router.get("/metrics", response_model=RuntimeMetricsSnapshot)
-async def get_runtime_metrics() -> RuntimeMetricsSnapshot:
-    """Aggregate-only latency, success-rate and correction-effect metrics."""
-
-    return agent_runtime_metrics_store.snapshot()

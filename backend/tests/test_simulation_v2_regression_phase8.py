@@ -39,12 +39,6 @@ from app.schemas.simulation_decision import (
 )
 from app.schemas.simulation_generation import GeneratedResponse, ResponseGenerationInput
 from app.schemas.simulation_state import ConversationState, RelationshipStateV2, SimulationState
-from app.schemas.strategy import (
-    ResponseAction as StrategyResponseAction,
-    TargetInterpretation,
-    TargetResponsePolicy,
-    ToneProfile,
-)
 from app.services.chat_record_analyzer import ChatRecordAnalyzer
 from app.services.evidence_retriever import EvidenceRetriever
 from app.services.evidence_store import EvidenceStore, EpisodeStore, PersonaEvidenceRepository
@@ -104,37 +98,6 @@ def decision(
             must_avoid=[],
         ),
         confidence=0.85,
-    )
-
-
-def strategy_policy(
-    *,
-    action: StrategyResponseAction = StrategyResponseAction.ACKNOWLEDGE,
-) -> TargetResponsePolicy:
-    return TargetResponsePolicy(
-        policy_id=f"policy_{action.value}",
-        interpretation=TargetInterpretation(
-            perceived_intent="用户礼貌提出请求。",
-            perceived_tone="礼貌、具体并愿意负责。",
-            salient_point="用户希望得到回应。",
-            perceived_concern="需要保持人物立场。",
-        ),
-        action=action,
-        response_goal="回应用户当前表达。",
-        stance="克制、直接。",
-        required_content=["回应当前请求"],
-        forbidden_content=["虚构事实"],
-        tone_profile=ToneProfile(
-            warmth=50,
-            directness=70,
-            formality=70,
-            emotional_intensity=20,
-            length="short",
-        ),
-        persona_evidence_refs=["persona_snapshot:eval_persona_a"],
-        memory_evidence_refs=[],
-        confidence=0.85,
-        uncertainty_notes=[],
     )
 
 
@@ -372,30 +335,28 @@ class Phase8ReliabilityTests(unittest.IsolatedAsyncioTestCase):
             )
         failed_repair.assert_awaited_once()
 
-    async def test_strategy_failure_uses_previous_state_and_records_private_metadata(self) -> None:
+    async def test_decision_failure_uses_previous_state_and_records_private_metadata(self) -> None:
         persona = fixed_personas()[0]
         req = request(persona, user_message="这是不能写入存储的敏感原文。")
-        strategy_agent = AsyncMock()
-        strategy_agent.run.side_effect = RuntimeError("strategy unavailable")
-        strategy_agent.prompt_version = "strategy-v2-test"
+        decision_engine = AsyncMock()
+        decision_engine.run.side_effect = RuntimeError("decision unavailable")
         generator = AsyncMock()
         generator.run.return_value = GeneratedResponse(
-            response_text="知道了。",
-            response_action="REPLY_BRIEF",
+            response_text="我知道了，你继续说。",
+            response_action="REPLY_NORMAL",
         )
         store = SimulationTurnStore(max_records=10)
 
         with self.assertLogs("app.agents.simulation_agent_v2", level="ERROR"):
             response = await SimulationAgentV2(
-                strategy_agent=strategy_agent,
+                decision_engine=decision_engine,
                 response_generator=generator,
                 turn_store=store,
             ).run(req)
 
-        self.assertTrue(response.runtime_meta.strategy_fallback_used)
-        self.assertFalse(response.runtime_meta.decision_fallback_used)
+        self.assertTrue(response.runtime_meta.decision_fallback_used)
         self.assertEqual(response.simulation_state.conversation_state.turn_count, 0)
-        self.assertEqual(response.response.action, "REPLY_BRIEF")
+        self.assertEqual(response.response.action, "REPLY_NORMAL")
         records = store.list_for_session("eval_session")
         self.assertEqual(len(records), 1)
         serialized = records[0].model_dump_json()
@@ -406,15 +367,17 @@ class Phase8ReliabilityTests(unittest.IsolatedAsyncioTestCase):
     async def test_generator_retries_once_then_uses_action_aligned_fallback(self) -> None:
         persona = fixed_personas()[0]
         req = request(persona)
-        strategy_agent = AsyncMock()
-        strategy_agent.run.return_value = strategy_policy()
-        strategy_agent.prompt_version = "strategy-v2-test"
+        state = create_initial_simulation_state(persona, session_id="eval_session")
+        output = decision(action="REPLY_BRIEF", polite=True)
+        result = TurnDecisionEngine().post_process(decision=output, current_state=state)
+        decision_engine = AsyncMock()
+        decision_engine.run.return_value = result
         generator = AsyncMock(side_effect=RuntimeError("unused"))
         generator.run = AsyncMock(side_effect=[RuntimeError("first"), RuntimeError("second")])
 
         with self.assertLogs("app.agents.simulation_agent_v2", level="ERROR"):
             response = await SimulationAgentV2(
-                strategy_agent=strategy_agent,
+                decision_engine=decision_engine,
                 response_generator=generator,
                 turn_store=SimulationTurnStore(max_records=10),
             ).run(req)

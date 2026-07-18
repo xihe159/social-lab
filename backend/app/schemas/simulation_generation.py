@@ -3,14 +3,12 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.schemas.persona_v2 import PersonaModelV2
-from app.schemas.feedback import InternalCorrection
 from app.schemas.simulation_decision import (
     DecisionAction,
     DecisionMessage,
     ResponsePolicy,
 )
 from app.schemas.simulation_state import SimulationState
-from app.schemas.simulation_adjustment import SimulationAdjustmentProfile
 
 
 class GenerationSchema(BaseModel):
@@ -25,14 +23,10 @@ class ResponseGenerationInput(GenerationSchema):
     persona: PersonaModelV2
     current_state: SimulationState
     response_policy: ResponsePolicy
-    strategy_policy_id: str | None = None
-    strategy_action: str | None = None
-    strategy_evidence_refs: list[str] = Field(default_factory=list)
     recent_turns: list[DecisionMessage] = Field(default_factory=list)
     user_message: str = Field(min_length=1)
     relevant_linguistic_evidence: list[str] = Field(default_factory=list)
-    simulation_adjustments: SimulationAdjustmentProfile | None = None
-    evaluation_correction: InternalCorrection | None = None
+    consistency_feedback: list[str] = Field(default_factory=list)
     generation_attempt: int = Field(default=1, ge=1, le=2)
 
     @model_validator(mode="after")

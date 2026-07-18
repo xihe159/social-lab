@@ -17,10 +17,9 @@ from app.schemas.persona_v2 import PersonaModelV2
 from app.schemas.simulation_decision import TurnDecisionResult
 from app.schemas.simulation_generation import GeneratedResponse
 from app.schemas.simulation_state import SimulationState
-from app.services.simulation_quality import SIMULATION_QUALITY_PASS_THRESHOLD
 
 
-CONSISTENCY_THRESHOLD = SIMULATION_QUALITY_PASS_THRESHOLD
+CONSISTENCY_THRESHOLD = 0.75
 LOW_DECISION_CONFIDENCE = 0.55
 HIGH_CONFLICT = 0.65
 MAJOR_RELATIONSHIP_DELTA = 0.12

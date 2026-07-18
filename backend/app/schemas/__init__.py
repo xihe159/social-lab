@@ -44,19 +44,7 @@ from app.schemas.consistency_evaluation import (
     ConsistencyEvaluationInput,
     ConsistencyEvaluationOutput,
     EvaluatorTriggerResult,
-)
-
-from app.schemas.feedback import InternalCorrection
-
-from app.schemas.simulation_adjustment import (
-    SimulationAdjustmentProfile,
-    SessionAdjustmentMeta,
-)
-
-from app.schemas.runtime_metrics import (
-    AgentRuntimeMetric,
-    AgentMetricSummary,
-    RuntimeMetricsSnapshot,
+    SessionEvaluationMeta,
 )
 
 from app.schemas.simulation_turn import (
@@ -100,7 +88,6 @@ from app.schemas.session import (
     SessionMessageRequest,
     SimulationReply,
     SessionActionResponse,
-    SessionStrategyMeta,
     SessionMessageResponse,
 )
 
@@ -115,23 +102,17 @@ from app.schemas.safety import (
 )
 
 from app.schemas.strategy import (
-    ResponseAction as StrategyResponseAction,
-    StrategyMessage,
-    TargetInterpretation,
-    ToneProfile,
-    TargetResponsePolicy,
-    TargetResponseStrategyRequest,
+    StrategyAdviceRequest,
+    StrategyAdviceResponse,
+    StrategyCandidateMessage,
+    StrategyAlternativeMessage,
 )
 
 from app.schemas.evaluation import (
-    EvaluationVerdict,
-    FailureAttribution,
-    FeedbackAction,
-    SimulationEvaluationResult,
-    SimulationEvaluationRequest,
+    EvaluationMode,
+    EvaluationRequest,
     EvaluationScoreItem,
-    SimulationEvaluationResponse,
-    SessionEvaluationMeta,
+    EvaluationResponse,
 )
 
 from app.schemas.report import (
@@ -178,15 +159,6 @@ __all__ = [
     "EvaluatorTriggerResult",
     "SessionEvaluationMeta",
 
-    "InternalCorrection",
-
-    "SimulationAdjustmentProfile",
-    "SessionAdjustmentMeta",
-
-    "AgentRuntimeMetric",
-    "AgentMetricSummary",
-    "RuntimeMetricsSnapshot",
-
     "SessionRuntimeMeta",
     "SafeTurnAnalysis",
     "SimulationTurnRecord",
@@ -217,7 +189,6 @@ __all__ = [
     "SessionMessageRequest",
     "SimulationReply",
     "SessionActionResponse",
-    "SessionStrategyMeta",
     "SessionMessageResponse",
 
     "StateEvaluateRequest",
@@ -226,20 +197,15 @@ __all__ = [
     "SafetyCheckRequest",
     "SafetyCheckResponse",
 
-    "StrategyResponseAction",
-    "StrategyMessage",
-    "TargetInterpretation",
-    "ToneProfile",
-    "TargetResponsePolicy",
-    "TargetResponseStrategyRequest",
+    "StrategyAdviceRequest",
+    "StrategyAdviceResponse",
+    "StrategyCandidateMessage",
+    "StrategyAlternativeMessage",
 
-    "EvaluationVerdict",
-    "FailureAttribution",
-    "FeedbackAction",
-    "SimulationEvaluationResult",
-    "SimulationEvaluationRequest",
+    "EvaluationMode",
+    "EvaluationRequest",
     "EvaluationScoreItem",
-    "SimulationEvaluationResponse",
+    "EvaluationResponse",
 
     "ReportRequest",
     "ReportResponse",

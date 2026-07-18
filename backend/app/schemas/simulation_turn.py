@@ -11,7 +11,6 @@ from app.schemas.simulation_decision import (
     SimulationStateDelta,
 )
 from app.schemas.simulation_state import SimulationState
-from app.schemas.runtime_metrics import EvaluationRunMode
 
 
 class SimulationTurnSchema(BaseModel):
@@ -20,14 +19,8 @@ class SimulationTurnSchema(BaseModel):
 
 class SessionRuntimeMeta(SimulationTurnSchema):
     decision_fallback_used: bool = False
-    strategy_fallback_used: bool = False
     generator_retry_count: int = Field(default=0, ge=0, le=1)
     generator_fallback_used: bool = False
-    evaluation_call_count: int = Field(default=0, ge=0, le=2)
-    feedback_retry_count: int = Field(default=0, ge=0, le=1)
-    strategy_replan_count: int = Field(default=0, ge=0, le=1)
-    simulation_revision_count: int = Field(default=0, ge=0, le=1)
-    rejected_candidate_discarded: bool = False
 
 
 class SafeTurnAnalysis(SimulationTurnSchema):
@@ -55,24 +48,8 @@ class SimulationTurnRecord(SimulationTurnSchema):
     decision_confidence: float = Field(ge=0.0, le=1.0)
     retrieved_evidence_ids: list[str] = Field(default_factory=list)
     evaluator_triggered: bool = False
-    evaluation_execution_mode: EvaluationRunMode = "not_run"
-    background_evaluation_scheduled: bool = False
-    evaluation_critical_reasons: list[str] = Field(default_factory=list, max_length=8)
     evaluator_passed: bool | None = None
-    initial_evaluation_score: int | None = Field(default=None, ge=0, le=100)
-    final_evaluation_score: int | None = Field(default=None, ge=0, le=100)
-    evaluation_verdict: str | None = None
-    failure_attribution: str | None = None
-    feedback_action: str = "none"
-    feedback_retry_count: int = Field(default=0, ge=0, le=1)
-    rejected_candidate_discarded: bool = False
-    adjustment_applied: bool = False
-    adjustment_activated: bool = False
-    adjustment_style_count: int = Field(default=0, ge=0, le=8)
-    adjustment_strategy_count: int = Field(default=0, ge=0, le=8)
-    adjustment_remaining_turns: int = Field(default=0, ge=0, le=10)
     decision_fallback_used: bool = False
-    strategy_fallback_used: bool = False
     generator_retry_count: int = Field(default=0, ge=0, le=1)
     generator_fallback_used: bool = False
     version: Literal["2.0"] = "2.0"

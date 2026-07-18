@@ -16,10 +16,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.agents.evaluation_agent import EvaluationAgent
 from app.llm.client import LLMClientError
-from app.schemas.evaluation import (
-    SimulationEvaluationRequest,
-    SimulationEvaluationResponse,
-)
+from app.schemas.evaluation import EvaluationRequest, EvaluationResponse
 
 
 router = APIRouter(prefix="/api/session", tags=["evaluation"])
@@ -28,10 +25,10 @@ evaluation_agent = EvaluationAgent()
 
 @router.post(
     "/evaluate",
-    response_model=SimulationEvaluationResponse,
-    operation_id="evaluate_simulation_fidelity_v2",
+    response_model=EvaluationResponse,
+    operation_id="evaluate_session_quality",
 )
-async def evaluate_session(request: SimulationEvaluationRequest):
+async def evaluate_session(request: EvaluationRequest):
     try:
         return await evaluation_agent.run(request)
 
