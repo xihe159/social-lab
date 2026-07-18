@@ -62,20 +62,6 @@ export type SimulationReport = {
   score: number;
   reason: string;
   outcomes: ReportOutcome[];
-
-  /**
-   * AnalysisAgent 生成的主要影响因素。
-   * 这里只放事实、问题、优势和风险，不放行动建议。
-   */
   factors: string[];
-
-  /**
-   * AnalysisAgent 生成的下一步行动。
-   */
-  nextStepAdvice: string;
-
-  /**
-   * RewriteAgent 生成的推荐话术。
-   */
   rewrite: string;
 };
