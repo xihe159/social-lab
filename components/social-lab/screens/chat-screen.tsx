@@ -39,7 +39,7 @@ export function ChatScreen({
       top: chatWindowRef.current.scrollHeight,
       behavior: "smooth",
     });
-  }, [messages]);
+  }, [messages, isSending]);
 
   const send = () => {
     const value = draft.trim();
@@ -68,6 +68,11 @@ export function ChatScreen({
       <div className="state-chip">对方目前关注：{persona.focus}</div>
 
       <div className="chat-window" ref={chatWindowRef} aria-live="polite">
+        {isSending && (
+          <p className="typing-status" role="status">
+            对方正在输入中...
+          </p>
+        )}
         {messages.map((message) =>
           message.role === "system" ? (
             <p className="chat-status" key={message.id}>

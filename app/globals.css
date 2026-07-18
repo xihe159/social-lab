@@ -193,6 +193,9 @@ button svg,
   border-radius: 999px;
   overflow: hidden;
   margin-bottom: 28px;
+  position: sticky;
+  top: 0;
+  z-index: 19;
 }
 
 .progress-track span {
@@ -466,22 +469,36 @@ p {
   gap: 10px;
 }
 
+.scenario-grid.compact .scenario-card:nth-child(1) {
+  background: #f4f6ff;
+}
+
+.scenario-grid.compact .scenario-card:nth-child(2) {
+  background: #f0faf2;
+}
+
+.scenario-grid.compact .scenario-card:nth-child(3) {
+  background: #fff5f5;
+}
+
 .scenario-icon {
   width: 52px;
   height: 52px;
   border-radius: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-grid;
+  place-items: center;
   color: #fff;
   background: #7f91a5;
+  line-height: 0;
 }
 
 .scenario-icon svg {
   width: 20px;
   height: 20px;
+  display: block;
   color: #fff;
   stroke: currentColor;
+  transform: translate(1px, 1px);
 }
 
 .scenario-icon.is-work {
@@ -506,10 +523,16 @@ p {
   display: block;
 }
 
+.scenario-card b {
+  font-size: 20px;
+  line-height: 1.2;
+}
+
 .scenario-card span,
 .choice-card small {
   margin-top: 8px;
   color: #5c6b80;
+  line-height: 1.42;
 }
 
 .choice-card {
@@ -940,6 +963,20 @@ textarea:focus {
   border-radius: 0;
 }
 
+.typing-status {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  align-self: flex-start;
+  margin: 0;
+  padding: 6px 2px;
+  color: #4f9d7a;
+  background: var(--bg-page);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
 .chat-window .bubble.target {
   align-self: flex-start;
   background: var(--lavender);
@@ -1191,9 +1228,7 @@ textarea:focus {
     height: 7px;
     margin: 0 0 28px;
     background: #e2ded6;
-    position: sticky;
     top: 66px;
-    z-index: 19;
   }
 
   .progress-track span {
@@ -1329,7 +1364,7 @@ textarea:focus {
   }
 
   .landing-screen .scenario-icon svg {
-    transform: translate(7px, 7px);
+    transform: translate(1px, 1px);
   }
 
   .screen-heading {
@@ -1631,6 +1666,93 @@ textarea,
   color: var(--muted);
   font-size: 13px;
   line-height: 1.6;
+}
+
+@media (min-width: 901px) {
+  .main-panel {
+    padding-top: 34px;
+    padding-bottom: 52px;
+  }
+
+  .screen {
+    max-width: 860px;
+  }
+
+  .scenario-screen,
+  .person-screen,
+  .persona-screen,
+  .chat-screen,
+  .report-screen {
+    max-width: 760px;
+  }
+
+  .progress-track {
+    height: 6px;
+    margin-bottom: 30px;
+    background: #e2ded6;
+  }
+
+  .progress-track span {
+    background: #9cad9a;
+  }
+
+  .hero-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+    gap: 22px;
+  }
+
+  .hero-copy {
+    min-height: 380px;
+    padding: 38px 44px;
+  }
+
+  .hero-copy h1 {
+    font-size: 56px;
+  }
+
+  .hero-actions .primary-action,
+  .footer-actions .primary-action {
+    min-height: 56px;
+    border-radius: 14px;
+    padding-inline: 28px;
+    font-size: 17px;
+  }
+
+  .landing-screen .section-title {
+    margin-top: 32px;
+  }
+
+  .landing-screen .scenario-grid.compact {
+    gap: 14px;
+  }
+
+  .landing-screen .scenario-card {
+    min-height: 132px;
+    padding: 16px;
+  }
+
+  .landing-screen .scenario-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 14px;
+  }
+
+  .form-stack.two-column {
+    grid-template-columns: 1fr;
+  }
+
+  .question-card {
+    padding: 22px;
+  }
+
+  .person-screen input,
+  .person-screen textarea {
+    font-size: 14px;
+  }
+
+  .chat-window {
+    min-height: 430px;
+  }
 }
 
 @media (max-width: 720px) {
