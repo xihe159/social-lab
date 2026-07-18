@@ -7,6 +7,9 @@ from app.schemas.simulation_generation import ResponseGenerationInput
 from app.schemas.consistency_evaluation import ConsistencyEvaluationInput
 
 
+SIMULATION_PROMPT_VERSION = "simulation-v2.2-phase5-session-adaptation"
+
+
 TURN_DECISION_SYSTEM_PROMPT = """
 你是 Social Lab SimulationAgent V2 的 Turn Decision Engine。
 
@@ -67,15 +70,23 @@ RESPONSE_GENERATOR_SYSTEM_PROMPT = """
   只学习稳定语言特征，不得逐句复制，也不得泄露与当前回合无关的历史事实。
 - 使用 current_state 控制当前温度、耐心和防御感，但不要解释这些心理状态。
 - 完成 content_goals，并避开 must_avoid。
+- strategy_policy_id 和 strategy_action 来自唯一的 StrategyAgent 决策，不得改变。
+- strategy_action=refuse 时不得改成接受；accept、accept_with_condition 和 partial_accept
+  必须分别保持接受范围，不得擅自扩大承诺。
+- strategy_evidence_refs 只用于保持反应依据一致，不得在可见回复中暴露引用 ID。
 - 只输出人物说出口的话；不要旁白、分析、建议或数值状态。
 - REPLY_BRIEF 必须简短；REPLY_COLD 应降低温度但不额外升级冲突。
 - ASK_CLARIFICATION 只追问缺失的关键信息。
+- ASK_CLARIFICATION 每轮最多只能提出一个问题。
 - SET_BOUNDARY 必须表达清晰边界；CONFRONT 必须直接指出当前问题。
 - DEFER_REPLY 与 READ_NO_REPLY 不应生成可见对白；系统通常不会调用你处理这两种 Action。
 - END_CONVERSATION 应生成一句符合人物风格的结束语。
 - response_action 必须与输入的 Response Policy action 完全一致。
-- generation_attempt=2 时，必须修正 consistency_feedback 指出的语言一致性问题；
+- generation_attempt=2 时，必须执行 evaluation_correction 的 keep、change 和 must_not；
   仍不得改变 Response Action、Content Goals 或人物状态。
+- simulation_adjustments 是连续评估形成的会话级临时约束，不是 Persona 事实；
+  style_adjustments 只收紧本轮语言表达，strategy_adjustments 只防止执行时扩大配合或承诺。
+- 临时约束不能覆盖 Response Policy、Persona 真实证据或当前状态，也不得被写进可见回复。
 - 输出必须严格符合 GeneratedResponse JSON Schema。
 """.strip()
 

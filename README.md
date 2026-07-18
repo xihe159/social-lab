@@ -124,6 +124,8 @@ LLM_API_KEY=your_api_key
 LLM_BASE_URL=https://your-openai-compatible-base-url
 LLM_MODEL_ID=your_model_id
 SIMULATION_AGENT_VERSION=v1
+APP_ENV=development
+EVALUATION_EXECUTION_MODE=development_sync
 ```
 
 Start the backend:
@@ -143,6 +145,7 @@ Main backend APIs:
 - `POST /api/persona/create`
 - `POST /api/session/message`
 - `POST /api/session/report`
+- `GET /api/session/metrics`
 - `GET /health`
 
 ## Deploy Frontend To GitHub Pages
@@ -185,12 +188,20 @@ LLM_API_KEY
 LLM_BASE_URL
 LLM_MODEL_ID
 SIMULATION_AGENT_VERSION=v1
+APP_ENV=production
+EVALUATION_EXECUTION_MODE=production_hybrid
 ```
 
 `SIMULATION_AGENT_VERSION` defaults to `v1`. Set it to `v2` to enable the
 full V2 pipeline. Switching the value back to `v1` provides an immediate
 rollback to the original SimulationAgent. Before enabling V2 in production,
 run the staging quality gates in `docs/SIMULATION_AGENT_V2_QUALITY_BASELINE.md`.
+
+For V2 evaluation timing, development defaults to synchronous evaluation on
+every turn. Production uses hybrid evaluation: ordinary turns are evaluated
+after the response, while low-confidence and other critical turns remain
+synchronous. `GET /api/session/metrics` exposes aggregate success-rate and
+latency summaries without returning session-level message data.
 
 After deployment, copy the Render service URL and set it as the GitHub repository variable `NEXT_PUBLIC_AGENT_API_BASE_URL`.
 

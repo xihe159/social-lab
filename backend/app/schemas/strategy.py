@@ -1,97 +1,123 @@
-# social-lab/backend/app/schemas/strategy.py
-# 2026/07/01
-#
-# 修改内容：
-# 1. 新增 StrategyCandidateMessage，匹配 strategy_agent.py 中的导入。
-# 2. 保留 StrategyAlternativeMessage 作为兼容别名，避免旧 __init__.py 或旧代码导入失败。
-# 3. 不导入 app.schemas.session / memory / safety，避免循环引用。
-# 4. StrategyAdviceResponse 是 LLM structured output，输出字段不设置默认值。
-
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from enum import Enum
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.common import ScenarioKey
+from app.schemas.feedback import InternalCorrection
+from app.schemas.memory import SessionMemory
+from app.schemas.persona_v2 import PersonaModelV2
+from app.schemas.simulation_state import RelationshipStateV2
+from app.schemas.simulation_adjustment import SimulationAdjustmentProfile
 
 
-class StrategyAdviceRequest(BaseModel):
-    """
-    StrategyAgent 的请求体。
+class StrategySchema(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        validate_assignment=True,
+        validate_default=True,
+    )
 
-    用于根据当前场景、人物画像、对话历史、关系状态和会话记忆，
-    生成下一轮沟通策略。
-    """
 
-    model_config = ConfigDict(extra="forbid")
+class ResponseAction(str, Enum):
+    ANSWER = "answer"
+    ACKNOWLEDGE = "acknowledge"
+    ASK_CLARIFICATION = "ask_clarification"
+    ACCEPT = "accept"
+    ACCEPT_WITH_CONDITION = "accept_with_condition"
+    PARTIAL_ACCEPT = "partial_accept"
+    REFUSE = "refuse"
+    CHALLENGE = "challenge"
+    SET_BOUNDARY = "set_boundary"
+    DEFER = "defer"
+    NO_REPLY = "no_reply"
+    END_CONVERSATION = "end_conversation"
+
+
+class StrategyMessage(StrategySchema):
+    role: Literal["user", "target", "system"]
+    content: str
+
+
+class TargetInterpretation(StrategySchema):
+    perceived_intent: str = Field(min_length=1, max_length=160)
+    perceived_tone: str = Field(min_length=1, max_length=120)
+    salient_point: str = Field(min_length=1, max_length=200)
+    perceived_concern: str = Field(min_length=1, max_length=200)
+
+
+class ToneProfile(StrategySchema):
+    warmth: int = Field(ge=0, le=100)
+    directness: int = Field(ge=0, le=100)
+    formality: int = Field(ge=0, le=100)
+    emotional_intensity: int = Field(ge=0, le=100)
+    length: Literal["very_short", "short", "medium"]
+
+
+class TargetResponsePolicy(StrategySchema):
+    """Internal target-person policy. It never contains user-facing advice."""
+
+    policy_id: str = Field(min_length=1, max_length=120)
+    interpretation: TargetInterpretation
+    action: ResponseAction
+    response_goal: str = Field(min_length=1, max_length=240)
+    stance: str = Field(min_length=1, max_length=160)
+    required_content: list[str]
+    forbidden_content: list[str]
+    tone_profile: ToneProfile
+    persona_evidence_refs: list[str]
+    memory_evidence_refs: list[str]
+    confidence: float = Field(ge=0.0, le=1.0)
+    uncertainty_notes: list[str]
+
+    @field_validator(
+        "required_content",
+        "forbidden_content",
+        "persona_evidence_refs",
+        "memory_evidence_refs",
+        "uncertainty_notes",
+    )
+    @classmethod
+    def keep_lists_bounded(cls, values: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        for value in values:
+            item = str(value).strip()
+            if item and item not in cleaned:
+                cleaned.append(item[:200])
+        return cleaned[:8]
+
+
+class TargetResponseStrategyRequest(StrategySchema):
+    trace_id: str = Field(min_length=1, max_length=120)
+    session_id: str = Field(min_length=1, max_length=120)
+    turn_id: str = Field(min_length=1, max_length=120)
 
     scenario: ScenarioKey
-    goal: str = Field(description="用户本次沟通目标")
-    outcome: str = Field(default="", description="用户期待的理想结果")
+    user_goal: str | None = Field(default=None, max_length=500)
 
-    persona: Any = Field(description="当前目标人物画像")
-    messages: List[Any] = Field(default_factory=list, description="已有对话历史")
+    persona_snapshot: PersonaModelV2
+    relationship_state: RelationshipStateV2
+    session_memory: SessionMemory | None = None
 
-    current_state: Optional[Any] = Field(
+    recent_messages: list[StrategyMessage] = Field(default_factory=list, max_length=6)
+    user_message: str = Field(min_length=1, max_length=4000)
+
+    evaluation_correction: InternalCorrection | None = Field(
         default=None,
-        description="当前关系状态，可以是 RelationshipState 的字典形式",
+        description="阶段 4 单次 Strategy 重规划的内部修正约束。",
     )
-    memory: Optional[Any] = Field(
+
+    simulation_adjustments: SimulationAdjustmentProfile | None = Field(
         default=None,
-        description="当前会话短期记忆，可以为空",
+        description="Evaluation 连续识别后生成的会话内短期修正；不属于 Persona。",
     )
 
-    last_user_message: str = Field(default="", description="最近一轮用户发言")
-    last_target_reply: str = Field(default="", description="最近一轮目标人物回复")
-
-    risk_flags: List[str] = Field(
-        default_factory=list,
-        description="最近一轮沟通风险点；请求体字段可以有默认值",
-    )
-    safety: Optional[Any] = Field(
-        default=None,
-        description="最近一轮 SafetyAgent 输出，可以为空",
-    )
-
-
-class StrategyCandidateMessage(BaseModel):
-    """
-    StrategyAgent 输出中的候选话术。
-
-    注意：
-    这是 LLM structured output 的嵌套模型，不要给字段设置默认值。
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    label: str = Field(description="候选话术标签，例如：稳妥版、直接版、缓和版")
-    message: str = Field(description="候选话术内容")
-    use_when: str = Field(description="适合在什么情况下使用")
-
-
-# 兼容旧命名：
-# 如果其他文件还在导入 StrategyAlternativeMessage，也不会报错。
-StrategyAlternativeMessage = StrategyCandidateMessage
-
-
-class StrategyAdviceResponse(BaseModel):
-    """
-    StrategyAgent 的结构化输出。
-
-    注意：
-    这是 LLM structured output，字段不要设置默认值。
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    next_move: str = Field(description="下一轮沟通的核心动作")
-    recommended_tone: str = Field(description="推荐语气")
-    avoid: List[str] = Field(description="下一轮应该避免的表达方式或风险动作")
-    focus_points: List[str] = Field(description="下一轮应该补充或强调的重点")
-    candidate_message: str = Field(description="最推荐的一句可直接使用的话术")
-    alternative_messages: List[StrategyCandidateMessage] = Field(
-        description="其他可选话术版本"
-    )
-    reason: str = Field(description="为什么推荐这个策略")
-    risk_reminders: List[str] = Field(description="下一轮沟通需要注意的风险提醒")
+    @field_validator("user_message")
+    @classmethod
+    def clean_user_message(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("user_message must not be blank")
+        return cleaned

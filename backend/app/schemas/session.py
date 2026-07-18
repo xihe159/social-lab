@@ -12,8 +12,10 @@ from app.schemas.safety import SafetyCheckResponse
 from app.schemas.simulation_decision import ResponseAction
 from app.schemas.simulation_state import SimulationState
 from app.schemas.evidence_retrieval import SessionEvidenceMeta
-from app.schemas.consistency_evaluation import SessionEvaluationMeta
+from app.schemas.evaluation import SessionEvaluationMeta
 from app.schemas.simulation_turn import SessionRuntimeMeta
+from app.schemas.simulation_adjustment import SessionAdjustmentMeta
+from app.schemas.strategy import TargetResponsePolicy
 
 class ChatMessage(BaseModel):
     """
@@ -88,6 +90,10 @@ class SessionMessageRequest(BaseModel):
         default=None,
         description="上一轮返回的 V2 动态状态；首次对话为空",
     )
+    response_policy: Optional[TargetResponsePolicy] = Field(
+        default=None,
+        description="可选的 Strategy V2 Policy；为空时由主链路内部生成。",
+    )
 
     @model_validator(mode="after")
     def validate_v2_context(self) -> "SessionMessageRequest":
@@ -138,6 +144,21 @@ class SessionActionResponse(BaseModel):
     conversation_ended: bool = False
 
 
+class SessionStrategyMeta(BaseModel):
+    """Safe Strategy policy metadata exposed to the internal V2 pipeline."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    policy_id: str
+    strategy_action: str
+    simulation_action: ResponseAction
+    confidence: float = Field(ge=0.0, le=1.0)
+    persona_evidence_refs: List[str] = Field(default_factory=list)
+    memory_evidence_refs: List[str] = Field(default_factory=list)
+    prompt_version: str
+    fallback_used: bool = False
+
+
 class SessionMessageResponse(BaseModel):
     """
     单轮模拟回复接口返回。
@@ -156,6 +177,10 @@ class SessionMessageResponse(BaseModel):
     response: Optional[SessionActionResponse] = Field(
         default=None,
         description="V2 行为响应；V1 为空并继续使用 target_message",
+    )
+    strategy_meta: Optional[SessionStrategyMeta] = Field(
+        default=None,
+        description="V2 本轮唯一 Strategy Policy 元数据；V1 为空。",
     )
     updated_memory: Optional[SessionMemory] = Field(
         default=None,
@@ -176,6 +201,10 @@ class SessionMessageResponse(BaseModel):
     evaluation_meta: Optional[SessionEvaluationMeta] = Field(
         default=None,
         description="V2 一致性评估元数据；正常未触发回合标记 evaluated=false",
+    )
+    adjustment_meta: Optional[SessionAdjustmentMeta] = Field(
+        default=None,
+        description="V2 会话级短期自适应元数据；不包含修正文本或 Persona 内容。",
     )
     runtime_meta: Optional[SessionRuntimeMeta] = Field(
         default=None,

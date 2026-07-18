@@ -80,11 +80,3 @@ class EvaluatorTriggerResult(ConsistencySchema):
     triggered: bool
     reasons: list[str] = Field(default_factory=list)
 
-
-class SessionEvaluationMeta(ConsistencySchema):
-    evaluated: bool = False
-    trigger_reasons: list[str] = Field(default_factory=list)
-    result: ConsistencyEvaluationOutput | None = None
-    retry_count: int = Field(default=0, ge=0, le=1)
-    evaluator_failed: bool = False
-

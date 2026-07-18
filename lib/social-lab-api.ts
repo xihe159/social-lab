@@ -137,6 +137,16 @@ export type SessionMessageResponse = {
   simulation: SimulationReply;
   updated_state: Persona["state"];
   response?: SessionActionResponse | null;
+  strategy_meta?: {
+    policy_id: string;
+    strategy_action: string;
+    simulation_action: ResponseAction;
+    confidence: number;
+    persona_evidence_refs: string[];
+    memory_evidence_refs: string[];
+    prompt_version: string;
+    fallback_used: boolean;
+  } | null;
   simulation_state?: SimulationStateV2 | null;
   evidence_meta?: {
     retrieval_mode: string;
@@ -146,24 +156,44 @@ export type SessionMessageResponse = {
   } | null;
   evaluation_meta?: {
     evaluated: boolean;
-    trigger_reasons: string[];
-    result: {
-      pass: boolean;
-      scores: Record<string, number>;
-      issues: Array<{
-        dimension: string;
-        severity: string;
-        message: string;
-        retry_instruction: string;
-      }>;
-    } | null;
+    execution_mode: "synchronous" | "background" | "not_run";
+    background_scheduled: boolean;
+    critical_reasons: string[];
+    initial_evaluation_id: string | null;
+    final_evaluation_id: string | null;
+    initial_score: number | null;
+    final_score: number | null;
+    score_delta: number | null;
+    initial_verdict: string | null;
+    final_verdict: string | null;
+    initial_failure_attribution: string | null;
+    final_failure_attribution: string | null;
+    feedback_action:
+      | "none"
+      | "revise_simulation"
+      | "replan_and_regenerate";
     retry_count: number;
+    correction_applied: boolean;
     evaluator_failed: boolean;
+    final_evaluator_failed: boolean;
+  } | null;
+  adjustment_meta?: {
+    applied: boolean;
+    activated_this_turn: boolean;
+    style_adjustment_count: number;
+    strategy_adjustment_count: number;
+    remaining_turns: number;
   } | null;
   runtime_meta?: {
     decision_fallback_used: boolean;
+    strategy_fallback_used: boolean;
     generator_retry_count: number;
     generator_fallback_used: boolean;
+    evaluation_call_count: number;
+    feedback_retry_count: number;
+    strategy_replan_count: number;
+    simulation_revision_count: number;
+    rejected_candidate_discarded: boolean;
   } | null;
 };
 

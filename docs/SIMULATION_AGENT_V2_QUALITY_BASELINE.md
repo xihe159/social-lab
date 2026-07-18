@@ -78,5 +78,7 @@ does not measure live model quality or network latency. Before setting
 - Simulation-only inferences never enter the real evidence store.
 - State changes continuously across turns with bounded deltas and emotional decay.
 - Fixed personas expose distinct behavioral signatures for the same message.
-- Consistency Evaluator runs only when triggered and can retry generation once.
+- Historical baseline: Consistency Evaluator ran only when triggered and could
+  retry generation once. Strategy/Evaluation V2 phase 4 now replaces it with
+  EvaluationAgent V2 and one bounded Strategy-or-Simulation correction route.
 - Regression, build, privacy, recovery, rollback, and staging gates are documented.
