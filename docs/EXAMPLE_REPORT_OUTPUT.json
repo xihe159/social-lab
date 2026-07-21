@@ -1,0 +1,95 @@
+{
+  "conversation_analysis": {
+    "methodology_notice": "逐句状态变化采用句级归因方法。",
+    "coverage": {
+      "total_user_turns": 1,
+      "analyzed_user_turns": 1,
+      "total_user_sentences": 2,
+      "analyzed_user_sentences": 2,
+      "turn_trace_count": 1,
+      "complete": true
+    },
+    "overall_assessment": "用户先给出具体承诺，随后使用立即表态要求，导致清晰度改善但压力上升。",
+    "evaluation_scores": {
+      "clarity": 76,
+      "responsiveness": 52,
+      "respect_and_boundary": 38,
+      "responsibility": 72,
+      "emotional_safety": 34,
+      "goal_alignment": 57,
+      "overall": 55
+    },
+    "state_trajectory_summary": "本轮清晰度上升，但压力和防御风险同时增加。",
+    "turns": [
+      {
+        "turn_index": 1,
+        "user_message": "我会在周三前提交完整版本。你必须现在答应。",
+        "target_reply": "计划可以看，但不要逼我现在决定。",
+        "sentences": [
+          {
+            "sentence_index": 1,
+            "sentence_text": "我会在周三前提交完整版本。",
+            "communicative_function": "commitment",
+            "evaluation_label": "effective",
+            "evaluation_score": 78,
+            "goal_effect": "supports",
+            "relationship_delta": {
+              "trust": 1,
+              "respect": 0,
+              "familiarity": 0,
+              "affinity": 0,
+              "authority": 0,
+              "emotional": 1
+            },
+            "dynamics_delta": {
+              "atmosphere_score": 1,
+              "pace_score": 1,
+              "pressure_level": 0,
+              "clarity_score": 3,
+              "responsiveness_score": 0,
+              "progress_score": 1,
+              "repairability_score": 0,
+              "boundary_score": 0
+            }
+          },
+          {
+            "sentence_index": 2,
+            "sentence_text": "你必须现在答应。",
+            "communicative_function": "pressure",
+            "evaluation_label": "risky",
+            "evaluation_score": 24,
+            "goal_effect": "obstructs",
+            "relationship_delta": {
+              "trust": -3,
+              "respect": -3,
+              "familiarity": 0,
+              "affinity": -1,
+              "authority": 1,
+              "emotional": -5
+            },
+            "dynamics_delta": {
+              "atmosphere_score": -4,
+              "pace_score": -3,
+              "pressure_level": 6,
+              "clarity_score": 0,
+              "responsiveness_score": -1,
+              "progress_score": -3,
+              "repairability_score": -2,
+              "boundary_score": -4
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "sentence_rewrites": [
+    {
+      "turn_index": 1,
+      "sentence_index": 2,
+      "original_text": "你必须现在答应。",
+      "rewritten_text": "你可以先考虑一下，方便时告诉我这个安排是否可行。",
+      "rewrite_reason": "去除立即表态要求并保留选择空间。",
+      "expected_effect": "降低压力和防御，提高继续讨论的可能性。"
+    }
+  ]
+}

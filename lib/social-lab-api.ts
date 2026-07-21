@@ -1,5 +1,6 @@
 import type {
   ChatMessage,
+  ConversationTurnTrace,
   FormData,
   Persona,
   PredictionFactorDirection,
@@ -224,6 +225,7 @@ export type SessionMemory = Record<string, unknown>;
 export type DynamicsContext = {
   currentDynamics?: ConversationDynamics | null;
   history?: ConversationDynamicsSnapshot[];
+  turnTraces?: ConversationTurnTrace[];
   memory?: SessionMemory | null;
 };
 
@@ -352,6 +354,149 @@ export type PredictionInfluenceFactorResponse = {
   explanation: string;
 };
 
+
+type RawConversationEvaluationScores = {
+  clarity: number;
+  responsiveness: number;
+  respect_and_boundary: number;
+  responsibility: number;
+  emotional_safety: number;
+  goal_alignment: number;
+  overall: number;
+};
+
+type RawAnalysisCoverage = {
+  total_user_turns: number;
+  analyzed_user_turns: number;
+  total_user_sentences: number;
+  analyzed_user_sentences: number;
+  turn_trace_count: number;
+  complete: boolean;
+};
+
+type RawDynamicsMetricState = {
+  atmosphere_score: number;
+  pace_score: number;
+  pressure_level: number;
+  clarity_score: number;
+  responsiveness_score: number;
+  progress_score: number;
+  repairability_score: number;
+  boundary_score: number;
+};
+
+type RawSentenceProcessAnalysis = {
+  turn_index: number;
+  sentence_index: number;
+  sentence_text: string;
+
+  communicative_function:
+    | "context"
+    | "request"
+    | "question"
+    | "explanation"
+    | "apology"
+    | "commitment"
+    | "boundary"
+    | "emotion"
+    | "pressure"
+    | "response"
+    | "other";
+
+  intent_summary: string;
+  target_likely_interpretation: string;
+  target_likely_feeling:
+    | "reassured"
+    | "respected"
+    | "understood"
+    | "neutral"
+    | "uncertain"
+    | "burdened"
+    | "pressured"
+    | "defensive"
+    | "hurt"
+    | "withdrawn";
+
+  evaluation_label:
+    | "strong"
+    | "effective"
+    | "neutral"
+    | "risky"
+    | "damaging";
+
+  evaluation_score: number;
+  goal_effect:
+    | "supports"
+    | "neutral"
+    | "obstructs";
+
+  evaluation_reason: string;
+
+  state_change_source:
+    | "turn_delta_attribution"
+    | "unavailable";
+
+  state_change_note: string;
+
+  relationship_before: Persona["state"] | null;
+  relationship_delta: StateDelta | null;
+  relationship_after: Persona["state"] | null;
+
+  dynamics_before: RawDynamicsMetricState | null;
+  dynamics_delta: ConversationDynamicsDelta | null;
+  dynamics_after: RawDynamicsMetricState | null;
+};
+
+type RawTurnProcessAnalysis = {
+  turn_index: number;
+  user_message: string;
+  target_reply: string;
+  turn_summary: string;
+  target_reply_interpretation: string;
+  turn_evaluation_score: number;
+
+  relationship_before: Persona["state"] | null;
+  relationship_delta: StateDelta | null;
+  relationship_after: Persona["state"] | null;
+
+  dynamics_before: RawDynamicsMetricState | null;
+  dynamics_delta: ConversationDynamicsDelta | null;
+  dynamics_after: RawDynamicsMetricState | null;
+
+  risk_flags: string[];
+  sentences: RawSentenceProcessAnalysis[];
+};
+
+type RawConversationProcessAnalysis = {
+  methodology_notice: string;
+  coverage: RawAnalysisCoverage;
+
+  overall_assessment: string;
+  strengths: string[];
+  problems: string[];
+  key_risks: string[];
+  primary_bottleneck: string;
+
+  evaluation_scores: RawConversationEvaluationScores;
+  state_trajectory_summary: string;
+  turns: RawTurnProcessAnalysis[];
+};
+
+type RawSentenceRewrite = {
+  turn_index: number;
+  sentence_index: number;
+  original_text: string;
+  rewritten_text: string;
+  rewrite_reason: string;
+  expected_effect: string;
+};
+
+type RawRewriteVariants = {
+  minimal_edit: string;
+  warmer_version: string;
+  firmer_version: string;
+};
+
 type ReportResponse = {
   success_probability: number;
   probability_low: number;
@@ -393,11 +538,17 @@ type ReportResponse = {
 
   calibration_version: string;
 
+  conversation_analysis:
+    RawConversationProcessAnalysis;
+
   strengths: string[];
   problems: string[];
   key_risks: string[];
   suggested_rewrite: string;
+  sentence_rewrites: RawSentenceRewrite[];
+  rewrite_variants: RawRewriteVariants;
   next_step_advice: string;
+  do_not_say: string[];
 };
 
 async function requestJson<T>(
@@ -516,6 +667,46 @@ export function buildDynamicsSnapshot(
   };
 }
 
+
+function toBackendTurnTrace(
+  trace: ConversationTurnTrace,
+) {
+  return {
+    turn_index: trace.turnIndex,
+    user_message: trace.userMessage,
+    target_reply: trace.targetReply,
+
+    relationship_before:
+      trace.relationshipBefore,
+    relationship_delta:
+      trace.relationshipDelta,
+    relationship_after:
+      trace.relationshipAfter,
+
+    dynamics_before:
+      trace.dynamicsBefore,
+    dynamics_delta:
+      trace.dynamicsDelta,
+    dynamics_after:
+      trace.dynamicsAfter,
+
+    risk_flags:
+      trace.riskFlags,
+  };
+}
+
+export function appendTurnTrace(
+  traces: ConversationTurnTrace[],
+  trace: ConversationTurnTrace | null,
+  maxItems = 20,
+): ConversationTurnTrace[] {
+  if (!trace) {
+    return traces.slice(-maxItems);
+  }
+
+  return [...traces, trace].slice(-maxItems);
+}
+
 export async function checkAgentHealth() {
   return requestJson<{
     status: string;
@@ -563,6 +754,7 @@ export async function sendSessionMessage(
   simulationState: SimulationStateV2 | null;
   dynamicsUpdate: ConversationDynamicsUpdate | null;
   currentDynamics: ConversationDynamics | null;
+  turnTrace: ConversationTurnTrace | null;
 }> {
   const result =
     await requestJson<SessionMessageResponse>(
@@ -606,6 +798,31 @@ export async function sendSessionMessage(
   const dynamicsUpdate =
     result.dynamics_update ?? null;
 
+  const turnIndex =
+    (dynamicsContext.turnTraces?.length ?? 0) + 1;
+
+  const turnTrace: ConversationTurnTrace = {
+    turnIndex,
+    userMessage,
+    targetReply: responseText,
+
+    relationshipBefore: persona.state,
+    relationshipDelta:
+      result.simulation.state_delta,
+    relationshipAfter:
+      result.updated_state,
+
+    dynamicsBefore:
+      dynamicsContext.currentDynamics ?? null,
+    dynamicsDelta:
+      dynamicsUpdate?.dynamics_delta ?? null,
+    dynamicsAfter:
+      dynamicsUpdate?.updated_dynamics ?? null,
+
+    riskFlags:
+      result.simulation.risk_flags,
+  };
+
   return {
     targetMessage: responseText
       ? toFrontendMessage({
@@ -644,6 +861,8 @@ export async function sendSessionMessage(
       dynamicsUpdate?.updated_dynamics ??
       dynamicsContext.currentDynamics ??
       null,
+
+    turnTrace,
   };
 }
 
@@ -668,11 +887,155 @@ export async function createSimulationReport(
 
       dynamics_history:
         dynamicsContext.history ?? [],
+
+      turn_traces:
+        (dynamicsContext.turnTraces ?? [])
+          .map(toBackendTurnTrace),
     },
     REPORT_REQUEST_TIMEOUT_MS,
   );
 
   return mapReportResponse(result);
+}
+
+
+function mapConversationAnalysis(
+  raw: RawConversationProcessAnalysis,
+) {
+  return {
+    methodologyNotice:
+      raw.methodology_notice,
+
+    coverage: {
+      totalUserTurns:
+        raw.coverage.total_user_turns,
+      analyzedUserTurns:
+        raw.coverage.analyzed_user_turns,
+      totalUserSentences:
+        raw.coverage.total_user_sentences,
+      analyzedUserSentences:
+        raw.coverage.analyzed_user_sentences,
+      turnTraceCount:
+        raw.coverage.turn_trace_count,
+      complete:
+        raw.coverage.complete,
+    },
+
+    overallAssessment:
+      raw.overall_assessment,
+
+    strengths:
+      raw.strengths,
+    problems:
+      raw.problems,
+    keyRisks:
+      raw.key_risks,
+
+    primaryBottleneck:
+      raw.primary_bottleneck,
+
+    evaluationScores: {
+      clarity:
+        raw.evaluation_scores.clarity,
+      responsiveness:
+        raw.evaluation_scores.responsiveness,
+      respectAndBoundary:
+        raw.evaluation_scores
+          .respect_and_boundary,
+      responsibility:
+        raw.evaluation_scores.responsibility,
+      emotionalSafety:
+        raw.evaluation_scores
+          .emotional_safety,
+      goalAlignment:
+        raw.evaluation_scores.goal_alignment,
+      overall:
+        raw.evaluation_scores.overall,
+    },
+
+    stateTrajectorySummary:
+      raw.state_trajectory_summary,
+
+    turns:
+      raw.turns.map((turn) => ({
+        turnIndex:
+          turn.turn_index,
+        userMessage:
+          turn.user_message,
+        targetReply:
+          turn.target_reply,
+        turnSummary:
+          turn.turn_summary,
+        targetReplyInterpretation:
+          turn.target_reply_interpretation,
+        turnEvaluationScore:
+          turn.turn_evaluation_score,
+
+        relationshipBefore:
+          turn.relationship_before,
+        relationshipDelta:
+          turn.relationship_delta,
+        relationshipAfter:
+          turn.relationship_after,
+
+        dynamicsBefore:
+          turn.dynamics_before,
+        dynamicsDelta:
+          turn.dynamics_delta,
+        dynamicsAfter:
+          turn.dynamics_after,
+
+        riskFlags:
+          turn.risk_flags,
+
+        sentences:
+          turn.sentences.map((sentence) => ({
+            turnIndex:
+              sentence.turn_index,
+            sentenceIndex:
+              sentence.sentence_index,
+            sentenceText:
+              sentence.sentence_text,
+
+            communicativeFunction:
+              sentence.communicative_function,
+            intentSummary:
+              sentence.intent_summary,
+            targetLikelyInterpretation:
+              sentence.target_likely_interpretation,
+            targetLikelyFeeling:
+              sentence.target_likely_feeling,
+
+            evaluationLabel:
+              sentence.evaluation_label,
+            evaluationScore:
+              sentence.evaluation_score,
+            goalEffect:
+              sentence.goal_effect,
+            evaluationReason:
+              sentence.evaluation_reason,
+
+            stateChangeSource:
+              sentence.state_change_source,
+            stateChangeNote:
+              sentence.state_change_note,
+
+            relationshipBefore:
+              sentence.relationship_before,
+            relationshipDelta:
+              sentence.relationship_delta,
+            relationshipAfter:
+              sentence.relationship_after,
+
+            dynamicsBefore:
+              sentence.dynamics_before,
+            dynamicsDelta:
+              sentence.dynamics_delta,
+            dynamicsAfter:
+              sentence.dynamics_after,
+          })),
+      })),
+  };
 }
 
 function mapReportResponse(
@@ -786,8 +1149,44 @@ function mapReportResponse(
     problems: result.problems,
     risks: result.key_risks,
 
-    rewrite: result.suggested_rewrite,
-    nextStep: result.next_step_advice,
+    conversationAnalysis:
+      mapConversationAnalysis(
+        result.conversation_analysis,
+      ),
+
+    rewrite:
+      result.suggested_rewrite,
+
+    sentenceRewrites:
+      result.sentence_rewrites.map((item) => ({
+        turnIndex:
+          item.turn_index,
+        sentenceIndex:
+          item.sentence_index,
+        originalText:
+          item.original_text,
+        rewrittenText:
+          item.rewritten_text,
+        rewriteReason:
+          item.rewrite_reason,
+        expectedEffect:
+          item.expected_effect,
+      })),
+
+    rewriteVariants: {
+      minimalEdit:
+        result.rewrite_variants.minimal_edit,
+      warmerVersion:
+        result.rewrite_variants.warmer_version,
+      firmerVersion:
+        result.rewrite_variants.firmer_version,
+    },
+
+    nextStep:
+      result.next_step_advice,
+
+    doNotSay:
+      result.do_not_say,
 
     predictionTrace: {
       scenarioPrior:

@@ -2,15 +2,26 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.analysis import (
+    ConversationProcessAnalysis,
+    ConversationTurnTrace,
+)
 from app.schemas.common import ScenarioKey
-from app.schemas.dynamics import ConversationDynamics, ConversationDynamicsSnapshot
+from app.schemas.dynamics import (
+    ConversationDynamics,
+    ConversationDynamicsSnapshot,
+)
 from app.schemas.persona import Persona
 from app.schemas.prediction import (
+    EvidenceSufficiency,
     OutcomeDistribution,
     PredictionCalculationTrace,
     PredictionConfidence,
     PredictionInfluenceFactor,
-    EvidenceSufficiency,
+)
+from app.schemas.rewrite import (
+    RewriteVariants,
+    SentenceRewrite,
 )
 from app.schemas.session import ChatMessage
 
@@ -32,6 +43,13 @@ class ReportRequest(BaseModel):
         default_factory=list,
         description="最近多轮 Dynamics 快照；建议最多传 10 轮",
     )
+    turn_traces: list[ConversationTurnTrace] = Field(
+        default_factory=list,
+        description=(
+            "每轮 SessionMessageResponse 形成的关系状态和 Dynamics 轨迹。"
+            "AnalysisAgent 使用它进行可审计的逐句状态归因。"
+        ),
+    )
 
     @property
     def user_goal(self) -> str:
@@ -41,28 +59,34 @@ class ReportRequest(BaseModel):
 class ReportResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # 兼容当前前端的字段。
+    # Prediction V2
     success_probability: int = Field(
         ge=0,
         le=100,
         description="模拟成功评分，0 到 100；不是现实统计概率",
     )
-    likely_outcome: str = Field(description="基于模拟的可能结果")
-    strengths: list[str]
-    problems: list[str]
-    key_risks: list[str]
-    suggested_rewrite: str
-    next_step_advice: str
-
-    # Prediction V2 新增字段。
     probability_low: int = Field(ge=0, le=100)
     probability_high: int = Field(ge=0, le=100)
     confidence_score: int = Field(ge=0, le=100)
     confidence: PredictionConfidence
     evidence_sufficiency: EvidenceSufficiency
 
+    likely_outcome: str
+    probability_reasoning: str
     outcome_distribution: OutcomeDistribution
     main_influence_factors: list[PredictionInfluenceFactor]
-    probability_reasoning: str
     prediction_trace: PredictionCalculationTrace
     calibration_version: str
+
+    # AnalysisAgent：观察与评价，不包含任何改进建议。
+    conversation_analysis: ConversationProcessAnalysis
+    strengths: list[str]
+    problems: list[str]
+    key_risks: list[str]
+
+    # RewriteAgent：所有逐句改写、整体改写和下一步集中在这里。
+    suggested_rewrite: str
+    sentence_rewrites: list[SentenceRewrite]
+    rewrite_variants: RewriteVariants
+    next_step_advice: str
+    do_not_say: list[str]
