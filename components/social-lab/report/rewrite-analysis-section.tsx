@@ -1,134 +1,136 @@
-import { Copy, RefreshCw } from "lucide-react";
+import { Copy, Sparkles } from "lucide-react";
 import type { CSSProperties } from "react";
 
-import type {
-  SimulationReport,
-} from "@/lib/social-lab-types";
+import type { SimulationReport } from "@/lib/social-lab-types";
 
 type RewriteAnalysisSectionProps = {
   report: SimulationReport;
   onCopy: () => void;
-  onRetry: () => void;
 };
 
 export function RewriteAnalysisSection({
   report,
   onCopy,
-  onRetry,
 }: RewriteAnalysisSectionProps) {
+  const firstRewrite = report.sentenceRewrites[0];
+  const rewriteFocus =
+    firstRewrite?.rewriteReason ||
+    report.conversationAnalysis.primaryBottleneck;
+  const expectedEffect =
+    firstRewrite?.expectedEffect ||
+    "让对方更容易理解你的实际诉求，并提高继续讨论解决方案的意愿。";
+
   return (
     <section style={sectionStyle}>
-      <div>
-        <p style={eyebrowStyle}>REWRITE AGENT</p>
-        <h3 style={titleStyle}>改写与下一步</h3>
-      </div>
-
-      {report.sentenceRewrites.length > 0 && (
-        <div style={sentenceListStyle}>
-          <h4 style={subTitleStyle}>逐句改写</h4>
-
-          {report.sentenceRewrites.map((item) => (
-            <article
-              key={`${item.turnIndex}-${item.sentenceIndex}`}
-              style={sentenceCardStyle}
-            >
-              <div style={sentenceMetaStyle}>
-                第 {item.turnIndex} 轮 · 句{" "}
-                {item.sentenceIndex}
-              </div>
-
-              <div style={compareGridStyle}>
-                <div style={compareBoxStyle}>
-                  <span style={labelStyle}>原句</span>
-                  <p style={paragraphStyle}>
-                    {item.originalText}
-                  </p>
-                </div>
-
-                <div style={compareBoxStyle}>
-                  <span style={labelStyle}>改写</span>
-                  <p style={paragraphStyle}>
-                    {item.rewrittenText}
-                  </p>
-                </div>
-              </div>
-
-              <p style={reasonStyle}>
-                <strong>改写原因：</strong>
-                {item.rewriteReason}
-              </p>
-              <p style={reasonStyle}>
-                <strong>预期影响：</strong>
-                {item.expectedEffect}
-              </p>
-            </article>
-          ))}
+      <div style={headingStyle}>
+        <div style={iconStyle}>
+          <Sparkles size={19} aria-hidden="true" />
         </div>
-      )}
+        <div>
+          <p style={eyebrowStyle}>怎么改</p>
+          <h3 style={titleStyle}>最推荐的表达</h3>
+        </div>
+      </div>
 
       <div style={mainRewriteStyle}>
-        <span style={labelStyle}>综合推荐表达</span>
-        <p style={mainRewriteTextStyle}>
-          {report.rewrite}
-        </p>
+        <p style={mainRewriteTextStyle}>{report.rewrite}</p>
       </div>
+
+      <div style={explanationGridStyle}>
+        <div style={explanationStyle}>
+          <strong style={explanationLabelStyle}>
+            改写重点
+          </strong>
+          <p style={paragraphStyle}>{rewriteFocus}</p>
+        </div>
+        <div style={explanationStyle}>
+          <strong style={explanationLabelStyle}>
+            预期变化
+          </strong>
+          <p style={paragraphStyle}>{expectedEffect}</p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onCopy}
+        className="secondary-action"
+        style={copyButtonStyle}
+      >
+        <Copy size={17} />
+        复制推荐表达
+      </button>
 
       <details style={detailsStyle}>
         <summary style={summaryStyle}>
-          查看三个备选版本
+          查看其他表达方式
         </summary>
-
-        <Variant
-          title="最小修改版"
-          text={report.rewriteVariants.minimalEdit}
-        />
-        <Variant
-          title="更温和版"
-          text={report.rewriteVariants.warmerVersion}
-        />
-        <Variant
-          title="更坚定版"
-          text={report.rewriteVariants.firmerVersion}
-        />
+        <div style={variantGridStyle}>
+          <Variant
+            title="最小修改版"
+            text={report.rewriteVariants.minimalEdit}
+          />
+          <Variant
+            title="更温和版"
+            text={report.rewriteVariants.warmerVersion}
+          />
+          <Variant
+            title="更坚定版"
+            text={report.rewriteVariants.firmerVersion}
+          />
+        </div>
       </details>
 
-      <div style={nextStepStyle}>
-        <strong>下一步</strong>
-        <p style={paragraphStyle}>
-          {report.nextStep}
-        </p>
-      </div>
+      {report.sentenceRewrites.length > 0 && (
+        <details style={detailsStyle}>
+          <summary style={summaryStyle}>
+            查看逐句修改说明
+          </summary>
+          <div style={sentenceListStyle}>
+            {report.sentenceRewrites.map((item) => (
+              <article
+                key={`${item.turnIndex}-${item.sentenceIndex}`}
+                style={sentenceCardStyle}
+              >
+                <div style={sentenceMetaStyle}>
+                  第 {item.turnIndex} 轮 · 句 {item.sentenceIndex}
+                </div>
+                <div style={compareGridStyle}>
+                  <div style={compareBoxStyle}>
+                    <span style={labelStyle}>原句</span>
+                    <p style={paragraphStyle}>
+                      {item.originalText}
+                    </p>
+                  </div>
+                  <div style={compareBoxStyle}>
+                    <span style={labelStyle}>建议改为</span>
+                    <p style={paragraphStyle}>
+                      {item.rewrittenText}
+                    </p>
+                  </div>
+                </div>
+                <p style={reasonStyle}>
+                  <strong>原因：</strong>
+                  {item.rewriteReason}
+                </p>
+              </article>
+            ))}
+          </div>
+        </details>
+      )}
 
       {report.doNotSay.length > 0 && (
-        <div style={avoidStyle}>
-          <strong>避免表达</strong>
+        <details style={detailsStyle}>
+          <summary style={summaryStyle}>
+            查看需要避免的表达
+          </summary>
           <ul style={listStyle}>
-            {report.doNotSay.map((item) => (
+            {report.doNotSay.slice(0, 2).map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
-        </div>
+        </details>
       )}
-
-      <div style={buttonRowStyle}>
-        <button
-          type="button"
-          onClick={onCopy}
-          style={primaryButtonStyle}
-        >
-          <Copy size={17} />
-          复制优化表达
-        </button>
-
-        <button
-          type="button"
-          onClick={onRetry}
-          style={secondaryButtonStyle}
-        >
-          <RefreshCw size={17} />
-          用这个版本重新模拟
-        </button>
-      </div>
     </section>
   );
 }
@@ -150,66 +152,142 @@ function Variant({
 
 const sectionStyle: CSSProperties = {
   display: "grid",
-  gap: 16,
+  gap: 14,
+};
+
+const headingStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 11,
+};
+
+const iconStyle: CSSProperties = {
+  display: "grid",
+  placeItems: "center",
+  width: 40,
+  height: 40,
+  borderRadius: 12,
+  color: "var(--primary)",
+  background: "var(--surface)",
+  border: "1px solid var(--line)",
 };
 
 const eyebrowStyle: CSSProperties = {
   margin: 0,
+  color: "var(--primary-muted)",
   fontSize: 12,
-  letterSpacing: "0.14em",
-  opacity: 0.58,
+  fontWeight: 800,
+  letterSpacing: "0.08em",
 };
 
 const titleStyle: CSSProperties = {
-  margin: "4px 0 0",
+  margin: "3px 0 0",
   fontSize: 22,
 };
 
-const subTitleStyle: CSSProperties = {
-  margin: 0,
-};
-
-const sentenceListStyle: CSSProperties = {
-  display: "grid",
-  gap: 10,
-};
-
-const sentenceCardStyle: CSSProperties = {
-  padding: 14,
-  borderRadius: 14,
-  border: "1px solid rgba(0, 0, 0, 0.09)",
-  display: "grid",
-  gap: 10,
-};
-
-const sentenceMetaStyle: CSSProperties = {
-  fontSize: 12,
-  opacity: 0.6,
-};
-
-const compareGridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns:
-    "repeat(auto-fit, minmax(230px, 1fr))",
-  gap: 10,
-};
-
-const compareBoxStyle: CSSProperties = {
-  padding: 12,
+const mainRewriteStyle: CSSProperties = {
+  padding: 18,
   borderRadius: 12,
-  background: "rgba(0, 0, 0, 0.035)",
+  background: "var(--surface)",
+  border: "1px solid var(--border)",
 };
 
-const labelStyle: CSSProperties = {
-  display: "block",
-  fontSize: 12,
-  fontWeight: 700,
-  opacity: 0.58,
+const mainRewriteTextStyle: CSSProperties = {
+  margin: 0,
+  fontSize: 15,
+  lineHeight: 1.85,
+  whiteSpace: "pre-wrap",
+};
+
+const explanationGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+  gap: 10,
+};
+
+const explanationStyle: CSSProperties = {
+  padding: 16,
+  borderRadius: 12,
+  background: "rgba(255, 255, 255, 0.64)",
+};
+
+const explanationLabelStyle: CSSProperties = {
+  color: "var(--primary)",
+  fontSize: 13,
 };
 
 const paragraphStyle: CSSProperties = {
   margin: "6px 0 0",
   lineHeight: 1.7,
+};
+
+const copyButtonStyle: CSSProperties = {
+  justifySelf: "start",
+};
+
+const detailsStyle: CSSProperties = {
+  padding: "14px 16px",
+  borderRadius: 12,
+  border: "1px solid var(--line)",
+  background: "rgba(255, 255, 255, 0.58)",
+};
+
+const summaryStyle: CSSProperties = {
+  cursor: "pointer",
+  color: "var(--primary)",
+  fontWeight: 800,
+};
+
+const variantGridStyle: CSSProperties = {
+  display: "grid",
+  gap: 10,
+  paddingTop: 11,
+};
+
+const variantStyle: CSSProperties = {
+  padding: 16,
+  borderRadius: 12,
+  background: "var(--surface)",
+  border: "1px solid var(--border-soft)",
+};
+
+const sentenceListStyle: CSSProperties = {
+  display: "grid",
+  gap: 10,
+  paddingTop: 11,
+};
+
+const sentenceCardStyle: CSSProperties = {
+  padding: 16,
+  borderRadius: 12,
+  background: "var(--surface)",
+  border: "1px solid var(--border-soft)",
+  display: "grid",
+  gap: 10,
+};
+
+const sentenceMetaStyle: CSSProperties = {
+  color: "var(--text-secondary)",
+  fontSize: 12,
+};
+
+const compareGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
+  gap: 10,
+};
+
+const compareBoxStyle: CSSProperties = {
+  padding: 14,
+  borderRadius: 12,
+  background: "var(--bg-soft)",
+};
+
+const labelStyle: CSSProperties = {
+  display: "block",
+  color: "var(--text-secondary)",
+  fontSize: 12,
+  fontWeight: 700,
 };
 
 const reasonStyle: CSSProperties = {
@@ -218,73 +296,8 @@ const reasonStyle: CSSProperties = {
   lineHeight: 1.65,
 };
 
-const mainRewriteStyle: CSSProperties = {
-  padding: 16,
-  borderRadius: 16,
-  background: "rgba(0, 0, 0, 0.04)",
-};
-
-const mainRewriteTextStyle: CSSProperties = {
-  margin: "8px 0 0",
-  lineHeight: 1.85,
-  whiteSpace: "pre-wrap",
-};
-
-const detailsStyle: CSSProperties = {
-  padding: 14,
-  borderRadius: 14,
-  border: "1px solid rgba(0, 0, 0, 0.09)",
-};
-
-const summaryStyle: CSSProperties = {
-  cursor: "pointer",
-  fontWeight: 700,
-};
-
-const variantStyle: CSSProperties = {
-  paddingTop: 12,
-};
-
-const nextStepStyle: CSSProperties = {
-  padding: 14,
-  borderRadius: 14,
-  background: "rgba(0, 0, 0, 0.035)",
-};
-
-const avoidStyle: CSSProperties = {
-  padding: 14,
-  borderRadius: 14,
-  border: "1px solid rgba(0, 0, 0, 0.08)",
-};
-
 const listStyle: CSSProperties = {
-  margin: "8px 0 0",
+  margin: "9px 0 0",
   paddingLeft: 20,
   lineHeight: 1.75,
-};
-
-const buttonRowStyle: CSSProperties = {
-  display: "flex",
-  gap: 10,
-  flexWrap: "wrap",
-};
-
-const primaryButtonStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 8,
-  padding: "11px 15px",
-  border: 0,
-  borderRadius: 12,
-  cursor: "pointer",
-  background: "currentColor",
-  color: "Canvas",
-  fontWeight: 700,
-};
-
-const secondaryButtonStyle: CSSProperties = {
-  ...primaryButtonStyle,
-  background: "transparent",
-  color: "inherit",
-  border: "1px solid rgba(0, 0, 0, 0.16)",
 };
