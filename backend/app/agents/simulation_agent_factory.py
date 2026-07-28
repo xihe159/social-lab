@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Literal, Protocol
 
 from app.agents.simulation_agent import SimulationAgentV1
 from app.agents.simulation_agent_v2 import SimulationAgentV2
 from app.schemas.session import SessionMessageRequest, SessionMessageResponse
 
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,11 @@ class SimulationAgentRunner(Protocol):
 def resolve_simulation_agent_version(value: str | None = None) -> SimulationAgentVersion:
     """Resolve the feature flag, falling back safely to V1 on invalid input."""
 
-    raw_value = value if value is not None else os.getenv("SIMULATION_AGENT_VERSION")
+    raw_value = (
+        value
+        if value is not None
+        else get_settings().simulation_agent_version
+    )
     normalized = (raw_value or DEFAULT_SIMULATION_AGENT_VERSION).strip().lower()
 
     if normalized not in SUPPORTED_SIMULATION_AGENT_VERSIONS:
