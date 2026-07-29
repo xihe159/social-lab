@@ -75,6 +75,9 @@ class SessionOrchestrator:
         )
         self.state_stage = StateStage(
             agent=self.state_agent,
+            # V3 deliberately restores the original V1 relationship-state
+            # ownership. StateAgent may enrich dynamics and risk signals, but
+            # it must not replace the target person's relationship result.
             override_relationship_state=(
                 self.simulation_agent_version == "v1"
             ),

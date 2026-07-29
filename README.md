@@ -123,7 +123,7 @@ Create `backend/.env`:
 LLM_API_KEY=your_api_key
 LLM_BASE_URL=https://your-openai-compatible-base-url
 LLM_MODEL_ID=your_model_id
-SIMULATION_AGENT_VERSION=v1
+SIMULATION_AGENT_VERSION=v3
 APP_ENV=development
 EVALUATION_EXECUTION_MODE=development_sync
 ```
@@ -187,21 +187,21 @@ Add Render environment variables:
 LLM_API_KEY
 LLM_BASE_URL
 LLM_MODEL_ID
-SIMULATION_AGENT_VERSION=v1
+SIMULATION_AGENT_VERSION=v3
 APP_ENV=production
 EVALUATION_EXECUTION_MODE=production_hybrid
 ```
 
-`SIMULATION_AGENT_VERSION` defaults to `v1`. Set it to `v2.1` to enable the
-full V2 pipeline. Switching the value back to `v1` provides an immediate
-rollback to the original SimulationAgent. Before enabling V2 in production,
-run the staging quality gates in `docs/SIMULATION_AGENT_V2_QUALITY_BASELINE.md`.
+`SIMULATION_AGENT_VERSION` defaults to `v3`. V3 keeps the original V1
+SimulationAgent as the sole owner of the visible character reply. Strategy
+runs as non-binding guidance, and Evaluation runs as an audit after the reply
+is fixed; neither can rewrite the current response. Set the value to `v1` only
+for an emergency rollback. Retired values `v2` and `v2.1` are automatically
+migrated to `v3` by the new backend so an old Render setting cannot prevent
+startup.
 
-For V2 evaluation timing, development defaults to synchronous evaluation on
-every turn. Production uses hybrid evaluation: ordinary turns are evaluated
-after the response, while low-confidence and other critical turns remain
-synchronous. `GET /api/session/metrics` exposes aggregate success-rate and
-latency summaries without returning session-level message data.
+`GET /api/session/metrics` exposes aggregate quality and latency summaries
+without returning session-level message data.
 
 After deployment, copy the Render service URL and set it as the GitHub repository variable `NEXT_PUBLIC_AGENT_API_BASE_URL`.
 

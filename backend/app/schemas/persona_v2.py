@@ -93,6 +93,16 @@ class EvidenceSummary(PersonaV2Schema):
     overall_confidence: UnitScore = Field(default=0.4, ge=0.0, le=1.0)
 
 
+class ChatEvidenceSummary(PersonaV2Schema):
+    """Bounded, portable summary of an observation from a real chat upload."""
+
+    evidence_id: str = Field(min_length=1, max_length=120)
+    summary: str = Field(min_length=1, max_length=360)
+    supports: list[str] = Field(default_factory=list, max_length=8)
+    contexts: list[str] = Field(default_factory=list, max_length=4)
+    confidence: UnitScore = Field(default=0.5, ge=0.0, le=1.0)
+
+
 class PersonaModelV2(PersonaV2Schema):
     persona_id: str = Field(min_length=1)
     basic_profile: BasicProfile = Field(default_factory=BasicProfile)
@@ -101,4 +111,8 @@ class PersonaModelV2(PersonaV2Schema):
     dyadic_profile: DyadicProfile = Field(default_factory=DyadicProfile)
     behavior_patterns: list[BehaviorPattern] = Field(default_factory=list)
     evidence_summary: EvidenceSummary = Field(default_factory=EvidenceSummary)
+    chat_evidence_summary: list[ChatEvidenceSummary] = Field(
+        default_factory=list,
+        max_length=6,
+    )
     version: Literal["2.0"] = "2.0"

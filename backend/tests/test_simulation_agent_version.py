@@ -22,29 +22,41 @@ from app.agents.simulation_agent_factory import (
     create_simulation_agent,
     resolve_simulation_agent_version,
 )
-from app.agents.simulation_agent_v2 import SimulationAgentV2
+from app.agents.simulation_agent_v3 import SimulationAgentV3
 
 
 class SimulationAgentVersionTests(unittest.TestCase):
-    def test_defaults_to_v1(self) -> None:
+    def test_defaults_to_v3(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             version, agent = create_simulation_agent()
 
-        self.assertEqual(version, "v1")
-        self.assertIsInstance(agent, SimulationAgentV1)
+        self.assertEqual(version, "v3")
+        self.assertIsInstance(agent, SimulationAgentV3)
 
-    def test_v2_can_be_enabled_by_environment(self) -> None:
-        with patch.dict(os.environ, {"SIMULATION_AGENT_VERSION": "v2"}, clear=True):
+    def test_v3_can_be_enabled_by_environment(self) -> None:
+        with patch.dict(os.environ, {"SIMULATION_AGENT_VERSION": "v3"}, clear=True):
             version, agent = create_simulation_agent()
 
-        self.assertEqual(version, "v2")
-        self.assertIsInstance(agent, SimulationAgentV2)
+        self.assertEqual(version, "v3")
+        self.assertIsInstance(agent, SimulationAgentV3)
 
     def test_version_value_is_normalized(self) -> None:
-        self.assertEqual(resolve_simulation_agent_version(" V2 "), "v2")
+        self.assertEqual(resolve_simulation_agent_version(" V3 "), "v3")
 
-    def test_invalid_value_falls_back_to_v1(self) -> None:
+    def test_retired_v2_value_migrates_to_v3(self) -> None:
+        version, agent = create_simulation_agent("v2.1")
+
+        self.assertEqual(version, "v3")
+        self.assertIsInstance(agent, SimulationAgentV3)
+
+    def test_invalid_value_falls_back_to_v3(self) -> None:
         version, agent = create_simulation_agent("future")
+
+        self.assertEqual(version, "v3")
+        self.assertIsInstance(agent, SimulationAgentV3)
+
+    def test_v1_remains_available_as_explicit_rollback(self) -> None:
+        version, agent = create_simulation_agent("v1")
 
         self.assertEqual(version, "v1")
         self.assertIsInstance(agent, SimulationAgentV1)

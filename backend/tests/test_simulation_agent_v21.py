@@ -468,9 +468,9 @@ def test_production_auto_mode_uses_unified_settings() -> None:
         assert resolve_evaluation_execution_mode() == "production_hybrid"
 
 
-def test_v21_feature_flag_is_explicit_while_v1_remains_default() -> None:
-    assert resolve_simulation_agent_version("v2.1") == "v2.1"
-    assert resolve_simulation_agent_version("invalid") == "v1"
+def test_v21_feature_flag_migrates_to_v3_production_path() -> None:
+    assert resolve_simulation_agent_version("v2.1") == "v3"
+    assert resolve_simulation_agent_version("invalid") == "v3"
 
 
 def test_session_learning_uses_numeric_temporary_style_preferences() -> None:

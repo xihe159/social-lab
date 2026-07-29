@@ -264,6 +264,70 @@ def _format_messages(messages: list[dict[str, Any]] | None) -> str:
     return "\n".join(lines) if lines else "暂无历史对话。"
 
 
+def _build_observed_persona_profile(persona_v2: Any) -> dict[str, Any] | None:
+    """Expose only real-chat observations, never Strategy decisions."""
+
+    if not isinstance(persona_v2, dict):
+        return None
+    evidence_summary = persona_v2.get("evidence_summary") or {}
+    if not evidence_summary.get("chat_record_available"):
+        return None
+
+    high_confidence_patterns = [
+        {
+            "pattern_id": item.get("pattern_id"),
+            "trigger": item.get("trigger"),
+            "observed_response": item.get("observed_response"),
+            "inferred_tendency": item.get("inferred_tendency"),
+            "confidence": item.get("confidence"),
+            "evidence_ids": item.get("evidence_ids", []),
+        }
+        for item in persona_v2.get("behavior_patterns", [])
+        if isinstance(item, dict)
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.65
+    ][:5]
+    chat_evidence = [
+        item
+        for item in persona_v2.get("chat_evidence_summary", [])
+        if isinstance(item, dict)
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.70
+    ][:6]
+    return {
+        "source": "REAL_CHAT_OBSERVATION",
+        "communication_style": persona_v2.get("communication_style", {}),
+        "high_confidence_behavior_patterns": high_confidence_patterns,
+        "chat_evidence_summary": chat_evidence,
+        "evidence_summary": evidence_summary,
+        "usage_boundary": (
+            "这些是观察特征，不是动作命令；不得据此强制接受、拒绝、冷淡或温暖。"
+        ),
+    }
+
+
+def _build_safe_session_memory(memory: Any) -> dict[str, Any] | None:
+    """Remove generated target quotes and keep only session continuity facts."""
+
+    if not isinstance(memory, dict):
+        return None
+    return {
+        "scope": "SESSION_CONTINUITY_ONLY",
+        "conversation_summary": memory.get("conversation_summary", ""),
+        "user_strategy_pattern": memory.get("user_strategy_pattern", [])[:6],
+        "temporary_target_concerns": memory.get("target_sensitive_points", [])[:4],
+        "resolved_points": memory.get("resolved_points", [])[:6],
+        "unresolved_points": memory.get("unresolved_points", [])[:6],
+        "important_events": memory.get("important_events", [])[:8],
+        "active_focus_issues": memory.get("active_focus_issues", [])[:5],
+        "key_info_repetition_risks": memory.get(
+            "key_info_repetition_risks", []
+        )[:5],
+        "next_suggested_focus": memory.get("next_suggested_focus", ""),
+        "usage_boundary": (
+            "Memory 只维护本次会话连续性，不是人物画像证据，不能修改稳定风格或行为模式。"
+        ),
+    }
+
+
 def build_persona_user_prompt(payload: dict[str, Any]) -> str:
     """
     根据 PersonaCreateRequest.model_dump() 构造 PersonaAgent 用户提示词。
@@ -326,11 +390,16 @@ def build_simulation_user_prompt(payload: dict[str, Any]) -> str:
     - goal / user_goal
     - outcome
     - persona
+    - persona_v2（只读取真实聊天观察特征）
     - messages
     - user_message
     - memory
     """
     goal = payload.get("goal", payload.get("user_goal", ""))
+    observed_persona_profile = _build_observed_persona_profile(
+        payload.get("persona_v2")
+    )
+    safe_memory = _build_safe_session_memory(payload.get("memory"))
 
     return f"""
 请进入目标人物视角，生成本轮回复。
@@ -347,14 +416,24 @@ def build_simulation_user_prompt(payload: dict[str, Any]) -> str:
 【目标人物画像 persona】
 {_to_pretty_json(payload.get("persona", {}))}
 
-【当前会话短期记忆 memory】
-{_to_pretty_json(payload.get("memory", {}))}
+【上传聊天记录形成的人物观察特征】
+{_to_pretty_json(observed_persona_profile) if observed_persona_profile else "未提供可用的真实聊天观察特征。"}
 
 【历史对话 messages】
 {_format_messages(payload.get("messages"))}
 
+【当前会话短期记忆 memory】
+{_to_pretty_json(safe_memory) if safe_memory else "暂无会话短期记忆。"}
+
 【用户最新发言 user_message】
 {_safe_text(payload.get("user_message"))}
+
+【人物证据优先级】
+1. 上传聊天记录形成的观察特征与稳定 persona 优先级最高；两者是人物模拟依据。
+2. 当前关系状态、真实历史对话和用户最新发言用于判断这个人此刻如何反应。
+3. Session Memory 优先级最低，只用于避免忘记本次会话事件，不能修改人物稳定风格。
+4. AI 以前模拟出的目标人物回复不是现实人物证据，不能反向学习成固定性格或习惯。
+5. Strategy 与 Evaluation 的标签、推荐方向和评分不得参与本轮回复决策。
 
 {NON_QUESTION_REPLY_EXAMPLES}
 

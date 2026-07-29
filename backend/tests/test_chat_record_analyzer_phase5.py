@@ -100,6 +100,13 @@ class ChatRecordPipelinePhase5Tests(unittest.TestCase):
         self.assertTrue(compiled.evidence_summary.chat_record_available)
         self.assertEqual(compiled.evidence_summary.evidence_count, len(analysis.evidence))
         self.assertEqual(compiled.evidence_summary.overall_confidence, analysis.confidence)
+        self.assertTrue(compiled.chat_evidence_summary)
+        self.assertTrue(
+            all(item.confidence >= 0.70 for item in compiled.chat_evidence_summary)
+        )
+        self.assertTrue(
+            all("真实聊天" in item.summary for item in compiled.chat_evidence_summary)
+        )
         self.assertEqual(base.behavior_patterns, [])
 
     def test_persona_create_post_process_exposes_analysis_and_compiled_v2(self) -> None:
