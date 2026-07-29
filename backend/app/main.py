@@ -1,42 +1,26 @@
 # social-lab/backend/app/main.py
-# 2026/07/04
+# 2026/07/28
 
 from __future__ import annotations
 
-from typing import Optional
+from contextlib import asynccontextmanager
+import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from app.core.logging import configure_logging
-
-from app.api.persona import router as persona_router
-from app.api.session import router as session_router
-from app.api.report import router as report_router
-from app.api.strategy import router as strategy_router
 from app.api.evaluation import router as evaluation_router
-
-try:
-    from app.llm.client import LLMClientError
-except ImportError:  # 兼容早期 llm/client.py
-    class LLMClientError(RuntimeError):
-        pass
-
-
-try:
-    from app.llm.client import LLM_MODEL_ID as ACTIVE_LLM_MODEL
-except ImportError:
-    try:
-        from app.llm.client import LLM_MODEL as ACTIVE_LLM_MODEL
-    except ImportError:
-        ACTIVE_LLM_MODEL = "unknown"
+from app.api.persona import router as persona_router
+from app.api.report import router as report_router
+from app.api.session import router as session_router
+from app.api.strategy import router as strategy_router
+from app.core.config import Settings, get_settings
+from app.core.logging import configure_logging
+from app.llm.client import close_async_client, generate_text
 
 
-try:
-    from app.llm.client import generate_text
-except ImportError:
-    generate_text = None
+logger = logging.getLogger(__name__)
 
 
 class DebugChatRequest(BaseModel):
@@ -44,7 +28,12 @@ class DebugChatRequest(BaseModel):
         default="你是 Social Lab 的测试助手，请自然、灵活、具体地回答用户问题。",
         description="系统提示词",
     )
-    user_message: str = Field(description="用户输入")
+
+    user_message: str = Field(
+        min_length=1,
+        description="用户输入",
+    )
+
     temperature: float = Field(
         default=0.7,
         ge=0,
@@ -60,65 +49,93 @@ async def _call_debug_llm(
     temperature: float = 0.7,
 ) -> str:
     """
-    Debug 专用的普通文本调用。
+    Debug 专用普通文本调用。
 
-    优先使用新版 app.llm.client.generate_text；
-    如果当前 llm/client.py 仍然是旧版，则兼容旧的 client + LLM_MODEL 写法。
+    统一使用 app.llm.client.generate_text，
+    不再维护旧客户端兼容分支。
     """
 
-    if generate_text is not None:
-        return await generate_text(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            temperature=temperature,
-        )
-
-    try:
-        from app.llm.client import get_async_client
-
-        llm_client = get_async_client()
-    except ImportError:
-        from app.llm.client import client as llm_client
-
-    response = await llm_client.chat.completions.create(
-        model=ACTIVE_LLM_MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": system_prompt,
-            },
-            {
-                "role": "user",
-                "content": user_prompt,
-            },
-        ],
+    return await generate_text(
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
         temperature=temperature,
     )
 
-    content: Optional[str] = response.choices[0].message.content
-    return content or ""
 
+def create_app(
+    settings_override: Settings | None = None,
+) -> FastAPI:
+    """
+    创建 FastAPI 应用。
 
-def create_app() -> FastAPI:
-    configure_logging("INFO")
+    settings_override 主要用于测试：
+    测试代码可以直接传入一份临时配置，
+    不需要修改真实的 backend/.env。
+    """
+
+    settings = settings_override or get_settings()
+
+    # 日志必须尽量早配置
+    configure_logging(settings.log_level)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        logger.info(
+            "application_started",
+            extra={
+                "app_name": settings.app_name,
+                "app_version": settings.app_version,
+                "app_env": settings.app_env,
+                "log_level": settings.log_level,
+                "llm_model_id": settings.llm_model_id,
+                "simulation_agent_version": (
+                    settings.simulation_agent_version
+                ),
+                "debug_endpoints_enabled": (
+                    settings.debug_endpoints_enabled
+                ),
+            },
+        )
+
+        try:
+            yield
+        finally:
+            # 关闭共享的 OpenAI/httpx 客户端
+            await close_async_client()
+
+            logger.info(
+                "application_stopped",
+                extra={
+                    "app_name": settings.app_name,
+                    "app_env": settings.app_env,
+                },
+            )
 
     app = FastAPI(
-        title="Social Lab Agent API",
-        version="0.2.0",
-        description="Social Lab 后端 Agent 稳定服务层 API",
+        title=settings.app_name,
+        version=settings.app_version,
+        description=settings.app_description,
+        lifespan=lifespan,
     )
+
+    # 方便依赖、测试和调试代码读取配置
+    app.state.settings = settings
+
+    # ------------------------------------------------------------------
+    # CORS
+    # ------------------------------------------------------------------
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:3000",
-            "http://127.0.0.1:3000",
-            "https://xihe159.github.io",
-        ],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_origins=settings.cors_origin_list,
+        allow_credentials=settings.cors_allow_credentials,
+        allow_methods=settings.cors_method_list,
+        allow_headers=settings.cors_header_list,
     )
+
+    # ------------------------------------------------------------------
+    # 业务路由
+    # ------------------------------------------------------------------
 
     app.include_router(persona_router)
     app.include_router(session_router)
@@ -126,11 +143,16 @@ def create_app() -> FastAPI:
     app.include_router(strategy_router)
     app.include_router(evaluation_router)
 
+    # ------------------------------------------------------------------
+    # 基础接口
+    # ------------------------------------------------------------------
+
     @app.get("/")
     async def root():
         return {
-            "message": "Social Lab Agent API is running",
-            "version": "0.2.0",
+            "message": f"{settings.app_name} is running",
+            "version": settings.app_version,
+            "environment": settings.app_env,
             "docs": "/docs",
             "health": "/health",
         }
@@ -140,49 +162,74 @@ def create_app() -> FastAPI:
         return {
             "status": "ok",
             "service": "social-lab-agent-api",
+            "version": settings.app_version,
+            "environment": settings.app_env,
         }
 
-    @app.get("/api/debug/llm")
-    async def debug_llm():
-        try:
-            content = await _call_debug_llm(
-                system_prompt="你是一个测试助手，只返回一句中文。",
-                user_prompt="请回复：LLM 接入成功。",
-                temperature=0,
-            )
-            return {
-                "ok": True,
-                "model": ACTIVE_LLM_MODEL,
-                "content": content,
-            }
-        except Exception as exc:
-            return {
-                "ok": False,
-                "model": ACTIVE_LLM_MODEL,
-                "error_type": exc.__class__.__name__,
-                "error": str(exc),
-            }
+    # ------------------------------------------------------------------
+    # Debug 接口
+    # ------------------------------------------------------------------
 
-    @app.post("/api/debug/chat")
-    async def debug_chat(request: DebugChatRequest):
-        try:
-            content = await _call_debug_llm(
-                system_prompt=request.system_prompt,
-                user_prompt=request.user_message,
-                temperature=request.temperature,
-            )
-            return {
-                "ok": True,
-                "model": ACTIVE_LLM_MODEL,
-                "content": content,
-            }
-        except Exception as exc:
-            return {
-                "ok": False,
-                "model": ACTIVE_LLM_MODEL,
-                "error_type": exc.__class__.__name__,
-                "error": str(exc),
-            }
+    if settings.debug_endpoints_enabled:
+
+        @app.get("/api/debug/llm")
+        async def debug_llm():
+            try:
+                content = await _call_debug_llm(
+                    system_prompt="你是一个测试助手，只返回一句中文。",
+                    user_prompt="请回复：LLM 接入成功。",
+                    temperature=0,
+                )
+
+                return {
+                    "ok": True,
+                    "model": settings.llm_model_id,
+                    "content": content,
+                }
+
+            except Exception as exc:
+                logger.exception(
+                    "debug_llm_call_failed",
+                    extra={
+                        "error_type": exc.__class__.__name__,
+                        "llm_model_id": settings.llm_model_id,
+                    },
+                )
+
+                # 不再把 str(exc) 直接返回给前端
+                raise HTTPException(
+                    status_code=502,
+                    detail="LLM 调用失败，请查看后端日志。",
+                ) from exc
+
+        @app.post("/api/debug/chat")
+        async def debug_chat(request: DebugChatRequest):
+            try:
+                content = await _call_debug_llm(
+                    system_prompt=request.system_prompt,
+                    user_prompt=request.user_message,
+                    temperature=request.temperature,
+                )
+
+                return {
+                    "ok": True,
+                    "model": settings.llm_model_id,
+                    "content": content,
+                }
+
+            except Exception as exc:
+                logger.exception(
+                    "debug_chat_call_failed",
+                    extra={
+                        "error_type": exc.__class__.__name__,
+                        "llm_model_id": settings.llm_model_id,
+                    },
+                )
+
+                raise HTTPException(
+                    status_code=502,
+                    detail="LLM 调用失败，请查看后端日志。",
+                ) from exc
 
     return app
 

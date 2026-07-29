@@ -1,23 +1,29 @@
-import os
+from __future__ import annotations
+
 from typing import Type, TypeVar
 
-from dotenv import load_dotenv
 from openai import AsyncOpenAI, OpenAIError
 from pydantic import BaseModel
+
+from app.core.config import get_settings
 from app.llm.structured_output import (
     StructuredOutputRepairError,
     validate_with_single_repair,
 )
 
 
-load_dotenv()
-
 T = TypeVar("T", bound=BaseModel)
 
 
-LLM_API_KEY = os.getenv("LLM_API_KEY")
-LLM_BASE_URL = os.getenv("LLM_BASE_URL")
-LLM_MODEL_ID = os.getenv("LLM_MODEL_ID", "gpt-4.1-mini")
+# 保留这个常量是为了兼容 main.py 或其他旧代码的导入。
+# 新代码应优先通过 get_settings().llm_model_id 读取。
+LLM_MODEL_ID = get_settings().llm_model_id
+
+
+# 应用进程内共享一个异步客户端。
+_async_client: AsyncOpenAI | None = None
+
+
 
 
 class LLMClientError(RuntimeError):
@@ -25,17 +31,48 @@ class LLMClientError(RuntimeError):
 
 
 def get_async_client() -> AsyncOpenAI:
-    if not LLM_API_KEY:
-        raise LLMClientError(
-            "缺少环境变量 LLM_API_KEY，请在 backend/.env 中配置。"
-        )
+    """
+    获取进程内共享的 AsyncOpenAI 客户端。
 
-    return AsyncOpenAI(
-        api_key=LLM_API_KEY,
-        base_url=LLM_BASE_URL or None,
-        timeout=60,
-        max_retries=1,
+    第一次真正调用 LLM 时才初始化，后续请求复用同一个客户端。
+    """
+
+    global _async_client
+
+    if _async_client is not None:
+        return _async_client
+
+    settings = get_settings()
+
+    try:
+        api_key = settings.get_llm_api_key()
+    except ValueError as exc:
+        raise LLMClientError(str(exc)) from exc
+
+    _async_client = AsyncOpenAI(
+        api_key=api_key,
+        base_url=settings.llm_base_url,
+        timeout=settings.llm_timeout_seconds,
+        max_retries=settings.llm_max_retries,
     )
+
+    return _async_client
+
+
+async def close_async_client() -> None:
+    """
+    关闭共享客户端及其底层 HTTP 连接。
+
+    由 FastAPI lifespan 在应用停止时调用。
+    """
+
+    global _async_client
+
+    client = _async_client
+    _async_client = None
+
+    if client is not None:
+        await client.close()
 
 
 def _ensure_additional_properties_false(schema: dict) -> dict:
@@ -177,7 +214,7 @@ async def generate_text(
 
     try:
         response = await client.chat.completions.create(
-            model=LLM_MODEL_ID,
+            model=get_settings().llm_model_id,
             messages=[
                 {
                     "role": "system",
@@ -227,7 +264,7 @@ async def generate_structured(
 
     try:
         response = await client.chat.completions.create(
-            model=LLM_MODEL_ID,
+            model=get_settings().llm_model_id,
             messages=[
                 {
                     "role": "system",
@@ -260,7 +297,7 @@ async def generate_structured(
         )
         try:
             repaired_response = await client.chat.completions.create(
-                model=LLM_MODEL_ID,
+                model=get_settings().llm_model_id,
                 messages=[
                     {
                         "role": "system",
