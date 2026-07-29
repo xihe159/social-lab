@@ -192,7 +192,7 @@ APP_ENV=production
 EVALUATION_EXECUTION_MODE=production_hybrid
 ```
 
-`SIMULATION_AGENT_VERSION` defaults to `v1`. Set it to `v2` to enable the
+`SIMULATION_AGENT_VERSION` defaults to `v1`. Set it to `v2.1` to enable the
 full V2 pipeline. Switching the value back to `v1` provides an immediate
 rollback to the original SimulationAgent. Before enabling V2 in production,
 run the staging quality gates in `docs/SIMULATION_AGENT_V2_QUALITY_BASELINE.md`.

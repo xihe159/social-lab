@@ -180,8 +180,12 @@ class SessionTelemetry:
                 evaluation_meta
                 and getattr(evaluation_meta, "final_evaluator_failed", False)
             ),
-            "strategy_policy_id": getattr(strategy_meta, "policy_id", None),
-            "strategy_action": getattr(strategy_meta, "strategy_action", None),
+            "strategy_policy_id": getattr(strategy_meta, "guidance_id", None),
+            "strategy_action": getattr(
+                strategy_meta,
+                "recommended_mode",
+                None,
+            ),
             "strategy_confidence": getattr(strategy_meta, "confidence", None),
             "decision_fallback_used": bool(
                 runtime_meta

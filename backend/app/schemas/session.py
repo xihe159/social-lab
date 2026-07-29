@@ -16,7 +16,7 @@ from app.schemas.simulation_adjustment import SessionAdjustmentMeta
 from app.schemas.simulation_decision import ResponseAction
 from app.schemas.simulation_state import SimulationState
 from app.schemas.simulation_turn import SessionRuntimeMeta
-from app.schemas.strategy import TargetResponsePolicy
+from app.schemas.strategy import TargetResponseGuidance, TargetResponsePolicy
 
 
 class ChatMessage(BaseModel):
@@ -125,7 +125,12 @@ class SessionMessageRequest(BaseModel):
     )
     response_policy: Optional[TargetResponsePolicy] = Field(
         default=None,
-        description="可选的 Strategy V2 Policy；为空时由主链路内部生成",
+        description="已弃用：兼容旧 Strategy Policy；V2.1 会转换为 Guidance",
+        deprecated=True,
+    )
+    response_guidance: Optional[TargetResponseGuidance] = Field(
+        default=None,
+        description="可选的 Strategy V2.1 Guidance；为空时由主链路内部生成",
     )
 
     @model_validator(mode="after")
@@ -194,14 +199,20 @@ class SessionActionResponse(BaseModel):
 
 
 class SessionStrategyMeta(BaseModel):
-    """向内部 V2 流程暴露的安全 Strategy Policy 元数据。"""
+    """V2.1 Guidance 与 Simulation 最终人物决策的安全元数据。"""
 
     model_config = ConfigDict(extra="forbid")
 
-    policy_id: str
-    strategy_action: str
+    policy_id: str = Field(deprecated=True)
+    strategy_action: str = Field(deprecated=True)
     simulation_action: ResponseAction
     confidence: float = Field(ge=0.0, le=1.0)
+    guidance_id: str = ""
+    recommended_mode: str = ""
+    final_action: ResponseAction = "REPLY_NORMAL"
+    decision_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    guidance_followed: bool = True
+    guidance_deviation_reason: str = ""
     persona_evidence_refs: List[str] = Field(default_factory=list)
     memory_evidence_refs: List[str] = Field(default_factory=list)
     prompt_version: str

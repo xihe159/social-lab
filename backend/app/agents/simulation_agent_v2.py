@@ -10,14 +10,16 @@ from uuid import uuid4
 
 from app.agents.evaluation_agent import EvaluationAgent
 from app.agents.strategy_agent import StrategyAgent
+from app.agents.simulation.turn_state_analyzer import TurnStateAnalyzer
+from app.agents.simulation.simulation_decision_engine import (
+    SimulationDecisionEngine,
+)
 from app.agents.simulation.response_generator import (
     ResponseGenerator,
     build_fallback_response,
 )
+from app.agents.simulation.decision_engine import apply_simulation_state_delta
 from app.agents.simulation.context_builder import SimulationContextBuilder
-from app.agents.simulation.strategy_policy_adapter import (
-    build_decision_result_from_strategy,
-)
 from app.schemas.common import RelationshipState
 from app.schemas.session import (
     ChatMessage,
@@ -48,18 +50,35 @@ from app.schemas.simulation_decision import (
     BehaviorSignals,
     DecisionAction,
     DecisionMessage,
+    ResponsePolicy,
+    TurnAnalysis,
+    TurnDecisionOutput,
     TurnDecisionResult,
     SimulationStateDelta,
+)
+from app.schemas.simulation_guidance import (
+    SimulationDecisionOutput,
+    SimulationDecisionRequest,
 )
 from app.schemas.simulation_generation import GeneratedResponse, ResponseGenerationInput
 from app.schemas.simulation_state import EmotionalState, SimulationState
 from app.schemas.strategy import (
-    ResponseAction as StrategyResponseAction,
+    ResponseMode,
+    ResponseModeHypothesis,
     TargetInterpretation,
+    TargetResponseGuidance,
     TargetResponsePolicy,
     TargetResponseStrategyRequest,
-    ToneProfile,
+    ToneRange,
     StrategyMessage,
+)
+from app.schemas.turn_state import (
+    TurnBehaviorSignals,
+    TurnContextMessage,
+    TurnStateAnalysis,
+    TurnStateAnalysisRequest,
+    TurnStateAnalysisResult,
+    TurnStateDelta,
 )
 from app.schemas.simulation_turn import (
     SafeTurnAnalysis,
@@ -81,6 +100,9 @@ from app.services.agent_runtime_metrics import (
     agent_runtime_metrics_store,
 )
 from app.services.evaluation_execution_policy import EvaluationExecutionPolicy
+from app.services.strategy_guidance import guidance_from_legacy_policy
+from app.services.state.constants import PRESSURE_WORDS
+from app.services.state.utils import contains_affirmed_any
 
 
 SILENT_ACTIONS = {"DEFER_REPLY", "READ_NO_REPLY"}
@@ -91,22 +113,26 @@ logger = logging.getLogger(__name__)
 class _SimulationCandidate:
     trace_id: str
     turn_id: str
-    strategy_policy: TargetResponsePolicy
+    strategy_guidance: TargetResponseGuidance
+    simulation_decision: SimulationDecisionOutput
     decision_result: TurnDecisionResult
     generation_input: ResponseGenerationInput | None
     generated: GeneratedResponse
+    decision_fallback_used: bool = False
     generator_retry_count: int = 0
     generator_fallback_used: bool = False
 
 
 class SimulationAgentV2:
-    """V2 pipeline with one Strategy-owned policy and one bounded feedback loop."""
+    """V2.1: state understanding, advisory Strategy, persona-owned decision."""
 
-    version = "v2.3-phase6-hybrid-evaluation"
+    version = "v2.5-v21-persona-decision"
 
     def __init__(
         self,
         strategy_agent: StrategyAgent | None = None,
+        turn_state_analyzer: TurnStateAnalyzer | None = None,
+        simulation_decision_engine: SimulationDecisionEngine | None = None,
         response_generator: ResponseGenerator | None = None,
         evidence_retriever: EvidenceRetriever | None = None,
         context_builder: SimulationContextBuilder | None = None,
@@ -118,6 +144,10 @@ class SimulationAgentV2:
         runtime_metrics: AgentRuntimeMetricsStore | None = None,
     ) -> None:
         self.strategy_agent = strategy_agent or StrategyAgent(mode="active")
+        self.turn_state_analyzer = turn_state_analyzer or TurnStateAnalyzer()
+        self.simulation_decision_engine = (
+            simulation_decision_engine or SimulationDecisionEngine()
+        )
         self.response_generator = response_generator or ResponseGenerator()
         self.context_builder = context_builder or SimulationContextBuilder(
             evidence_retriever or EvidenceRetriever()
@@ -180,50 +210,95 @@ class SimulationAgentV2:
             top_k=4,
         )
         retrieval = evidence_context.retrieval
+        trace_id = f"trace_{uuid4().hex}"
+        turn_id = f"turn_{current_state.conversation_state.turn_count + 1}"
+
+        state_analysis_request = TurnStateAnalysisRequest(
+            persona=persona_v2,
+            current_state=current_state,
+            scenario=request.scenario,
+            goal=request.goal,
+            outcome=request.outcome or "",
+            recent_turns=[
+                TurnContextMessage(role=item.role, content=item.content)
+                for item in request.messages[-6:]
+            ],
+            relevant_evidence=list(evidence_context.decision_evidence),
+            user_message=request.user_message,
+        )
+        turn_state_fallback_used = False
+        try:
+            turn_state_result = await self._call_turn_state_analyzer(
+                state_analysis_request,
+                trace_id=trace_id,
+                session_id=session_id,
+                turn_id=turn_id,
+            )
+        except Exception:
+            turn_state_fallback_used = True
+            turn_state_result = _fallback_turn_state_analysis(
+                current_state,
+            )
+            logger.exception(
+                "turn_state_analyzer_failed_using_neutral_analysis",
+                extra={"persona_id": persona_id, "session_id": session_id},
+            )
 
         strategy_request = TargetResponseStrategyRequest(
-            trace_id=f"trace_{uuid4().hex}",
+            trace_id=trace_id,
             session_id=session_id,
-            turn_id=f"turn_{current_state.conversation_state.turn_count + 1}",
+            turn_id=turn_id,
             scenario=request.scenario,
             user_goal=request.goal,
             persona_snapshot=persona_v2,
-            relationship_state=current_state.relationship_state,
+            relationship_state=turn_state_result.updated_state.relationship_state,
             session_memory=request.memory,
             recent_messages=[
                 StrategyMessage(role=item.role, content=item.content)
                 for item in request.messages[-6:]
             ],
             user_message=request.user_message,
+            turn_state_analysis=turn_state_result.analysis,
             simulation_adjustments=active_adjustments,
         )
         strategy_fallback_used = False
-        if request.response_policy is not None:
-            strategy_policy = request.response_policy.model_copy(deep=True)
+        legacy_response_policy = request.__dict__.get("response_policy")
+        if request.response_guidance is not None:
+            strategy_guidance = request.response_guidance.model_copy(deep=True)
+        elif legacy_response_policy is not None:
+            strategy_guidance = guidance_from_legacy_policy(
+                legacy_response_policy
+            )
         else:
             try:
-                strategy_policy = await self._call_strategy_agent(strategy_request)
+                strategy_guidance = await self._call_strategy_agent(
+                    strategy_request
+                )
             except Exception:
                 strategy_fallback_used = True
-                strategy_policy = _fallback_strategy_policy(
+                strategy_guidance = _fallback_strategy_guidance(
                     request=strategy_request,
                 )
                 logger.exception(
-                    "strategy_agent_failed_using_safe_policy_fallback",
+                    "strategy_agent_failed_using_advisory_guidance_fallback",
                     extra={"persona_id": persona_id, "session_id": session_id},
                 )
         candidate = await self._build_candidate(
             trace_id=strategy_request.trace_id,
             turn_id=strategy_request.turn_id,
-            strategy_policy=strategy_policy,
-            current_state=current_state,
+            strategy_guidance=strategy_guidance,
+            turn_state_result=turn_state_result,
             persona_v2=persona_v2,
             recent_turns=recent_turns,
             user_message=request.user_message,
+            scenario=request.scenario,
+            goal=request.goal,
+            outcome=request.outcome or "",
+            session_memory=request.memory,
+            decision_evidence=list(evidence_context.decision_evidence),
             linguistic_evidence=list(evidence_context.linguistic_evidence),
             persona_id=persona_id,
             session_id=session_id,
-            freeze_state=strategy_fallback_used,
             allow_generation_recovery=True,
             simulation_adjustments=active_adjustments,
         )
@@ -239,7 +314,7 @@ class SimulationAgentV2:
         learning_evaluation: SimulationEvaluationResponse | None = None
         execution_decision = self.evaluation_execution_policy.decide(
             session_id=session_id,
-            strategy_policy=candidate.strategy_policy,
+            strategy_guidance=candidate.strategy_guidance,
             decision_result=candidate.decision_result,
             adjustment_manager=self.adjustment_manager,
             user_message=request.user_message,
@@ -248,10 +323,10 @@ class SimulationAgentV2:
             "synchronous" if execution_decision.synchronous else "background"
         )
         evaluation_meta.critical_reasons = list(execution_decision.reasons)
-        if strategy_fallback_used:
+        if candidate.decision_fallback_used:
             evaluation_meta.execution_mode = "not_run"
 
-        if not strategy_fallback_used and execution_decision.synchronous:
+        if not candidate.decision_fallback_used and execution_decision.synchronous:
             try:
                 evaluation_call_count = 1
                 initial_evaluation = await self._call_evaluation_agent(
@@ -301,10 +376,17 @@ class SimulationAgentV2:
                             strategy_request=strategy_request,
                             strategy_correction=plan.strategy_correction,
                             simulation_correction=plan.simulation_correction,
-                            current_state=current_state,
+                            turn_state_result=turn_state_result,
                             persona_v2=persona_v2,
                             recent_turns=recent_turns,
                             user_message=request.user_message,
+                            scenario=request.scenario,
+                            goal=request.goal,
+                            outcome=request.outcome or "",
+                            session_memory=request.memory,
+                            decision_evidence=list(
+                                evidence_context.decision_evidence
+                            ),
                             linguistic_evidence=list(
                                 evidence_context.linguistic_evidence
                             ),
@@ -360,7 +442,7 @@ class SimulationAgentV2:
                     extra={"persona_id": persona_id, "session_id": session_id},
                 )
 
-        elif not strategy_fallback_used:
+        elif not candidate.decision_fallback_used:
             background_request = self._build_evaluation_request(
                 strategy_request=strategy_request,
                 request=request,
@@ -399,7 +481,7 @@ class SimulationAgentV2:
                 confidence=learning_evaluation.confidence,
                 failure_attribution=learning_evaluation.failure_attribution,
             )
-        elif execution_decision.synchronous or strategy_fallback_used:
+        elif execution_decision.synchronous or candidate.decision_fallback_used:
             adjustment_observation = self.adjustment_manager.observe(
                 session_id=session_id,
                 turn_number=adjustment_context.turn_number,
@@ -423,7 +505,8 @@ class SimulationAgentV2:
             else adjustment_context.remaining_turns
         )
 
-        strategy_policy = candidate.strategy_policy
+        strategy_guidance = candidate.strategy_guidance
+        simulation_decision = candidate.simulation_decision
         decision_result = candidate.decision_result
         response_policy = decision_result.decision.response_policy
         generated = candidate.generated
@@ -466,18 +549,26 @@ class SimulationAgentV2:
                 conversation_ended=generated.response_action == "END_CONVERSATION",
             ),
             strategy_meta=SessionStrategyMeta(
-                policy_id=strategy_policy.policy_id,
-                strategy_action=strategy_policy.action.value,
+                policy_id=strategy_guidance.guidance_id,
+                strategy_action=strategy_guidance.recommended_mode.value,
                 simulation_action=response_policy.action,
-                confidence=strategy_policy.confidence,
-                persona_evidence_refs=strategy_policy.persona_evidence_refs,
-                memory_evidence_refs=strategy_policy.memory_evidence_refs,
+                confidence=strategy_guidance.confidence,
+                persona_evidence_refs=strategy_guidance.persona_evidence_refs,
+                memory_evidence_refs=strategy_guidance.memory_evidence_refs,
                 prompt_version=getattr(
                     self.strategy_agent,
                     "prompt_version",
-                    "strategy-v2.2-phase5-session-adaptation",
+                    "strategy-v2.5-v21-guidance",
                 ),
                 fallback_used=strategy_fallback_used,
+                guidance_id=strategy_guidance.guidance_id,
+                recommended_mode=strategy_guidance.recommended_mode.value,
+                final_action=response_policy.action,
+                decision_confidence=simulation_decision.confidence,
+                guidance_followed=simulation_decision.guidance_followed,
+                guidance_deviation_reason=(
+                    simulation_decision.guidance_deviation_reason
+                ),
             ),
             simulation_state=decision_result.updated_state,
             evidence_meta=SessionEvidenceMeta(
@@ -494,19 +585,22 @@ class SimulationAgentV2:
                     and adjustment_observation.activated_this_turn
                 ),
                 style_adjustment_count=(
-                    len(resulting_adjustments.style_adjustments)
+                    _style_adjustment_count(resulting_adjustments)
                     if resulting_adjustments is not None
                     else 0
                 ),
                 strategy_adjustment_count=(
-                    len(resulting_adjustments.strategy_adjustments)
+                    int(
+                        resulting_adjustments.style.prevent_unplanned_commitment
+                    )
                     if resulting_adjustments is not None
                     else 0
                 ),
                 remaining_turns=adjustment_remaining_turns,
             ),
             runtime_meta=SessionRuntimeMeta(
-                decision_fallback_used=False,
+                turn_state_fallback_used=turn_state_fallback_used,
+                decision_fallback_used=candidate.decision_fallback_used,
                 strategy_fallback_used=strategy_fallback_used,
                 generator_retry_count=generator_retry_count,
                 generator_fallback_used=generator_fallback_used,
@@ -594,7 +688,7 @@ class SimulationAgentV2:
     async def _call_strategy_agent(
         self,
         request: TargetResponseStrategyRequest,
-    ) -> TargetResponsePolicy:
+    ) -> TargetResponseGuidance:
         started_at = time.perf_counter()
         try:
             result = await self.strategy_agent.run(request)
@@ -607,7 +701,7 @@ class SimulationAgentV2:
                 version=_prompt_version(
                     self.strategy_agent,
                     "prompt_version",
-                    "strategy-v2.2-phase5-session-adaptation",
+                    "strategy-v2.5-v21-guidance",
                 ),
                 run_mode="synchronous",
                 started_at=started_at,
@@ -622,7 +716,95 @@ class SimulationAgentV2:
             version=_prompt_version(
                 self.strategy_agent,
                 "prompt_version",
-                "strategy-v2.2-phase5-session-adaptation",
+                "strategy-v2.5-v21-guidance",
+            ),
+            run_mode="synchronous",
+            started_at=started_at,
+            success=True,
+        )
+        if isinstance(result, TargetResponsePolicy):
+            return guidance_from_legacy_policy(result)
+        return result
+
+    async def _call_turn_state_analyzer(
+        self,
+        request: TurnStateAnalysisRequest,
+        *,
+        trace_id: str,
+        session_id: str,
+        turn_id: str,
+    ) -> TurnStateAnalysisResult:
+        started_at = time.perf_counter()
+        try:
+            result = await self.turn_state_analyzer.run(request)
+        except Exception:
+            self._record_runtime_metric(
+                trace_id=trace_id,
+                session_id=session_id,
+                turn_id=turn_id,
+                agent="TurnStateAnalyzer",
+                version=_prompt_version(
+                    self.turn_state_analyzer,
+                    "prompt_version",
+                    "turn-state-v2.1",
+                ),
+                run_mode="synchronous",
+                started_at=started_at,
+                success=False,
+            )
+            raise
+        self._record_runtime_metric(
+            trace_id=trace_id,
+            session_id=session_id,
+            turn_id=turn_id,
+            agent="TurnStateAnalyzer",
+            version=_prompt_version(
+                self.turn_state_analyzer,
+                "prompt_version",
+                "turn-state-v2.1",
+            ),
+            run_mode="synchronous",
+            started_at=started_at,
+            success=True,
+        )
+        return result
+
+    async def _call_simulation_decision_engine(
+        self,
+        request: SimulationDecisionRequest,
+        *,
+        trace_id: str,
+        session_id: str,
+        turn_id: str,
+    ) -> SimulationDecisionOutput:
+        started_at = time.perf_counter()
+        try:
+            result = await self.simulation_decision_engine.run(request)
+        except Exception:
+            self._record_runtime_metric(
+                trace_id=trace_id,
+                session_id=session_id,
+                turn_id=turn_id,
+                agent="SimulationDecisionEngine",
+                version=_prompt_version(
+                    self.simulation_decision_engine,
+                    "prompt_version",
+                    "simulation-decision-v2.1",
+                ),
+                run_mode="synchronous",
+                started_at=started_at,
+                success=False,
+            )
+            raise
+        self._record_runtime_metric(
+            trace_id=trace_id,
+            session_id=session_id,
+            turn_id=turn_id,
+            agent="SimulationDecisionEngine",
+            version=_prompt_version(
+                self.simulation_decision_engine,
+                "prompt_version",
+                "simulation-decision-v2.1",
             ),
             run_mode="synchronous",
             started_at=started_at,
@@ -683,7 +865,7 @@ class SimulationAgentV2:
                 version=_prompt_version(
                     self.response_generator,
                     "prompt_version",
-                    "simulation-v2.2-phase5-session-adaptation",
+                    "simulation-v2.5-v21-persona-decision",
                 ),
                 run_mode="synchronous",
                 started_at=started_at,
@@ -698,7 +880,7 @@ class SimulationAgentV2:
             version=_prompt_version(
                 self.response_generator,
                 "prompt_version",
-                "simulation-v2.2-phase5-session-adaptation",
+                "simulation-v2.5-v21-persona-decision",
             ),
             run_mode="synchronous",
             started_at=started_at,
@@ -754,50 +936,87 @@ class SimulationAgentV2:
         *,
         trace_id: str,
         turn_id: str,
-        strategy_policy: TargetResponsePolicy,
-        current_state: SimulationState,
+        strategy_guidance: TargetResponseGuidance,
+        turn_state_result: TurnStateAnalysisResult,
         persona_v2,
         recent_turns: list[DecisionMessage],
         user_message: str,
+        scenario,
+        goal: str,
+        outcome: str,
+        session_memory: SessionMemory | None,
+        decision_evidence: list[str],
         linguistic_evidence: list[str],
         persona_id: str,
         session_id: str,
-        freeze_state: bool,
         allow_generation_recovery: bool,
         simulation_adjustments: SimulationAdjustmentProfile | None = None,
         evaluation_correction: InternalCorrection | None = None,
     ) -> _SimulationCandidate:
-        decision_result = build_decision_result_from_strategy(
-            policy=strategy_policy,
-            current_state=current_state,
+        decision_request = SimulationDecisionRequest(
+            persona=persona_v2,
+            current_state=turn_state_result.updated_state,
+            scenario=scenario,
+            goal=goal,
+            outcome=outcome,
+            recent_turns=recent_turns,
+            relevant_evidence=decision_evidence,
+            session_memory=session_memory,
+            user_message=user_message,
+            turn_state_analysis=turn_state_result.analysis,
+            strategy_guidance=strategy_guidance,
         )
-        if freeze_state:
-            decision_result.decision.state_delta = _zero_state_delta()
-            decision_result.updated_state = current_state.model_copy(deep=True)
+        decision_fallback_used = False
+        try:
+            simulation_decision = await self._call_simulation_decision_engine(
+                decision_request,
+                trace_id=trace_id,
+                session_id=session_id,
+                turn_id=turn_id,
+            )
+        except Exception:
+            decision_fallback_used = True
+            simulation_decision = _fallback_simulation_decision(
+                strategy_guidance
+            )
+            logger.exception(
+                "simulation_decision_failed_using_neutral_fallback",
+                extra={"persona_id": persona_id, "session_id": session_id},
+            )
+
+        decision_result = _build_legacy_decision_result(
+            turn_state_result=turn_state_result,
+            simulation_decision=simulation_decision,
+            user_message=user_message,
+        )
 
         response_policy = decision_result.decision.response_policy
         if response_policy.action in SILENT_ACTIONS:
             return _SimulationCandidate(
                 trace_id=trace_id,
                 turn_id=turn_id,
-                strategy_policy=strategy_policy,
+                strategy_guidance=strategy_guidance,
+                simulation_decision=simulation_decision,
                 decision_result=decision_result,
                 generation_input=None,
                 generated=GeneratedResponse(
                     response_text="",
                     response_action=response_policy.action,
                 ),
+                decision_fallback_used=decision_fallback_used,
             )
 
         generation_input = ResponseGenerationInput(
             persona=persona_v2,
             current_state=decision_result.updated_state,
             response_policy=response_policy,
-            strategy_policy_id=strategy_policy.policy_id,
-            strategy_action=strategy_policy.action.value,
+            strategy_policy_id=strategy_guidance.guidance_id,
+            strategy_action=strategy_guidance.recommended_mode.value,
+            strategy_guidance_id=strategy_guidance.guidance_id,
+            recommended_mode=strategy_guidance.recommended_mode.value,
             strategy_evidence_refs=[
-                *strategy_policy.persona_evidence_refs,
-                *strategy_policy.memory_evidence_refs,
+                *strategy_guidance.persona_evidence_refs,
+                *strategy_guidance.memory_evidence_refs,
             ],
             recent_turns=recent_turns,
             user_message=user_message,
@@ -828,7 +1047,7 @@ class SimulationAgentV2:
                 fallback_used = True
                 generated = build_fallback_response(
                     response_policy,
-                    strategy_action=strategy_policy.action.value,
+                    strategy_action=strategy_guidance.recommended_mode.value,
                 )
                 logger.exception(
                     "feedback_generation_failed_using_corrected_policy_fallback",
@@ -838,10 +1057,12 @@ class SimulationAgentV2:
         return _SimulationCandidate(
             trace_id=trace_id,
             turn_id=turn_id,
-            strategy_policy=strategy_policy,
+            strategy_guidance=strategy_guidance,
+            simulation_decision=simulation_decision,
             decision_result=decision_result,
             generation_input=generation_input,
             generated=generated,
+            decision_fallback_used=decision_fallback_used,
             generator_retry_count=retry_count,
             generator_fallback_used=fallback_used,
         )
@@ -889,10 +1110,12 @@ class SimulationAgentV2:
             _SimulationCandidate(
                 trace_id=candidate.trace_id,
                 turn_id=candidate.turn_id,
-                strategy_policy=candidate.strategy_policy,
+                strategy_guidance=candidate.strategy_guidance,
+                simulation_decision=candidate.simulation_decision,
                 decision_result=candidate.decision_result,
                 generation_input=retry_input,
                 generated=generated,
+                decision_fallback_used=candidate.decision_fallback_used,
                 generator_retry_count=candidate.generator_retry_count,
                 generator_fallback_used=fallback_used,
             ),
@@ -906,10 +1129,15 @@ class SimulationAgentV2:
         strategy_request: TargetResponseStrategyRequest,
         strategy_correction: InternalCorrection | None,
         simulation_correction: InternalCorrection | None,
-        current_state: SimulationState,
+        turn_state_result: TurnStateAnalysisResult,
         persona_v2,
         recent_turns: list[DecisionMessage],
         user_message: str,
+        scenario,
+        goal: str,
+        outcome: str,
+        session_memory: SessionMemory | None,
+        decision_evidence: list[str],
         linguistic_evidence: list[str],
         persona_id: str,
         session_id: str,
@@ -920,10 +1148,10 @@ class SimulationAgentV2:
         )
         strategy_fallback_used = False
         try:
-            revised_policy = await self._call_strategy_agent(retry_request)
+            revised_guidance = await self._call_strategy_agent(retry_request)
         except Exception:
             strategy_fallback_used = True
-            revised_policy = _fallback_strategy_policy(request=retry_request)
+            revised_guidance = _fallback_strategy_guidance(request=retry_request)
             logger.exception(
                 "strategy_replan_failed_discarding_rejected_candidate",
                 extra={"persona_id": persona_id, "session_id": session_id},
@@ -932,20 +1160,22 @@ class SimulationAgentV2:
         candidate = await self._build_candidate(
             trace_id=retry_request.trace_id,
             turn_id=retry_request.turn_id,
-            strategy_policy=revised_policy,
-            current_state=current_state,
+            strategy_guidance=revised_guidance,
+            turn_state_result=turn_state_result,
             persona_v2=persona_v2,
             recent_turns=recent_turns,
             user_message=user_message,
+            scenario=scenario,
+            goal=goal,
+            outcome=outcome,
+            session_memory=session_memory,
+            decision_evidence=decision_evidence,
             linguistic_evidence=linguistic_evidence,
             persona_id=persona_id,
             session_id=session_id,
-            freeze_state=strategy_fallback_used,
             allow_generation_recovery=False,
             simulation_adjustments=strategy_request.simulation_adjustments,
-            evaluation_correction=(
-                simulation_correction if not strategy_fallback_used else None
-            ),
+            evaluation_correction=simulation_correction,
         )
         return candidate, not strategy_fallback_used, strategy_fallback_used
 
@@ -960,11 +1190,11 @@ class SimulationAgentV2:
         retrieved_evidence_ids: list[str],
     ) -> SimulationEvaluationRequest:
         decision = candidate.decision_result.decision
-        policy = candidate.strategy_policy
+        guidance = candidate.strategy_guidance
         used_evidence_refs = _unique_strings(
             [
-                *policy.persona_evidence_refs,
-                *policy.memory_evidence_refs,
+                *guidance.persona_evidence_refs,
+                *guidance.memory_evidence_refs,
                 *retrieved_evidence_ids,
             ],
             limit=12,
@@ -981,7 +1211,7 @@ class SimulationAgentV2:
                 for item in request.messages[-6:]
             ],
             user_message=request.user_message,
-            response_policy=policy,
+            response_guidance=guidance,
             simulation_result=SimulationEvaluationResult(
                 reply=candidate.generated.response_text,
                 attitude=_attitude_label(candidate.generated.response_action),
@@ -993,23 +1223,24 @@ class SimulationAgentV2:
                 ),
                 state_delta=decision.state_delta.model_dump(),
                 risk_flags=decision.turn_analysis.detected_events[:5],
-                policy_id=policy.policy_id,
+                policy_id=guidance.guidance_id,
+                guidance_id=guidance.guidance_id,
                 used_evidence_refs=used_evidence_refs,
             ),
             strategy_prompt_version=_prompt_version(
                 self.strategy_agent,
                 "prompt_version",
-                "strategy-v2.2-phase5-session-adaptation",
+                "strategy-v2.5-v21-guidance",
             ),
             simulation_prompt_version=_prompt_version(
                 self.response_generator,
                 "prompt_version",
-                "simulation-v2.2-phase5-session-adaptation",
+                "simulation-v2.5-v21-persona-decision",
             ),
             evaluation_prompt_version=_prompt_version(
                 self.evaluation_agent,
                 "prompt_version",
-                "evaluation-v2.1-phase5-session-signals",
+                "evaluation-v2.5-v21-hard-errors-only",
             ),
         )
 
@@ -1023,6 +1254,7 @@ class SimulationAgentV2:
         meta.initial_score = evaluation.simulation_success_score
         meta.initial_verdict = evaluation.verdict
         meta.initial_failure_attribution = evaluation.failure_attribution
+        meta.hard_error_count = len(evaluation.hard_errors)
 
     @staticmethod
     def _set_final_evaluation_meta(
@@ -1033,6 +1265,7 @@ class SimulationAgentV2:
         meta.final_score = evaluation.simulation_success_score
         meta.final_verdict = evaluation.verdict
         meta.final_failure_attribution = evaluation.failure_attribution
+        meta.hard_error_count = len(evaluation.hard_errors)
         if meta.initial_score is not None:
             meta.score_delta = meta.final_score - meta.initial_score
 
@@ -1244,42 +1477,233 @@ def _stable_persona_id(request: SessionMessageRequest) -> str:
     return f"persona_{sha256(value.encode('utf-8')).hexdigest()[:16]}"
 
 
-def _fallback_strategy_policy(
+def _fallback_strategy_guidance(
     *,
     request: TargetResponseStrategyRequest,
-) -> TargetResponsePolicy:
-    return TargetResponsePolicy(
-        policy_id=f"policy_fallback_{request.turn_id}",
+) -> TargetResponseGuidance:
+    return TargetResponseGuidance(
+        guidance_id=f"guidance_fallback_{request.turn_id}",
         interpretation=TargetInterpretation(
             perceived_intent="当前无法可靠判断用户意图。",
             perceived_tone="中性或不确定。",
             salient_point="需要对用户当前表达作出保守回应。",
             perceived_concern="上下文或策略服务暂时不可用。",
         ),
-        action=StrategyResponseAction.ACKNOWLEDGE,
-        response_goal="从目标人物立场作出简短、中性且不升级冲突的回应。",
-        stance="保持克制，不新增承诺。",
+        possible_response_modes=[
+            ResponseModeHypothesis(
+                mode=ResponseMode.ENGAGE,
+                probability=1.0,
+                reason="Strategy 暂不可用，保留人物决策空间。",
+            )
+        ],
+        recommended_mode=ResponseMode.ENGAGE,
+        communication_goal="理解当前表达并保持人物自身的真实反应。",
         required_content=["回应用户当前表达"],
         forbidden_content=["升级冲突", "虚构事实", "替用户制定下一句话"],
-        tone_profile=ToneProfile(
-            warmth=45,
-            directness=55,
+        tone_range=ToneRange(
+            warmth_min=25,
+            warmth_max=70,
+            directness_min=30,
+            directness_max=75,
             formality=50,
-            emotional_intensity=20,
-            length="short",
+            emotional_intensity_max=55,
+            preferred_length="medium",
         ),
         persona_evidence_refs=[
             f"persona_snapshot:{request.persona_snapshot.persona_id}"
         ],
         memory_evidence_refs=[],
         confidence=0.0,
-        uncertainty_notes=["StrategyAgent 不可用，使用保守回退策略。"],
+        uncertainty_notes=["StrategyAgent 不可用，使用开放式建议。"],
     )
 
 
-def _zero_state_delta() -> SimulationStateDelta:
-    return SimulationStateDelta(
-        **{name: 0.0 for name in SimulationStateDelta.model_fields}
+def _fallback_turn_state_analysis(
+    current_state: SimulationState,
+) -> TurnStateAnalysisResult:
+    state_delta = TurnStateDelta(
+        **{name: 0.0 for name in TurnStateDelta.model_fields}
+    )
+    analysis = TurnStateAnalysis(
+        user_intent="当前用户意图暂时无法可靠解析。",
+        user_emotion="不确定",
+        behavior_signals=TurnBehaviorSignals(
+            politeness=0.5,
+            clarity=0.5,
+            accountability=0.5,
+            pressure=0.0,
+            blame=0.0,
+            vulnerability=0.0,
+            boundary_violation=0.0,
+            honesty_signal=0.5,
+        ),
+        persona_triggers=[],
+        detected_events=[],
+        risk_flags=[],
+        state_delta=state_delta,
+        confidence=0.0,
+    )
+    updated_state = apply_simulation_state_delta(
+        state=current_state,
+        delta=SimulationStateDelta(**state_delta.model_dump()),
+    )
+    return TurnStateAnalysisResult(
+        analysis=analysis,
+        updated_state=updated_state,
+    )
+
+
+def _fallback_simulation_decision(
+    guidance: TargetResponseGuidance,
+) -> SimulationDecisionOutput:
+    follows_guidance = guidance.recommended_mode == ResponseMode.ENGAGE
+    return SimulationDecisionOutput(
+        response_policy=ResponsePolicy(
+            action="REPLY_NORMAL",
+            content_goals=["回应用户当前表达，不新增事实或承诺"],
+            tone="中性、克制",
+            reply_length="medium",
+            must_avoid=["虚构人物事实", "无依据地拒绝或接受"],
+        ),
+        confidence=0.0,
+        guidance_followed=follows_guidance,
+        guidance_deviation_reason=(
+            "" if follows_guidance else "人物决策层不可用，使用中性安全回退。"
+        ),
+    )
+
+
+def _build_legacy_decision_result(
+    *,
+    turn_state_result: TurnStateAnalysisResult,
+    simulation_decision: SimulationDecisionOutput,
+    user_message: str,
+) -> TurnDecisionResult:
+    analysis = turn_state_result.analysis
+    confirmed_risks = _confirmed_turn_risks(
+        analysis=analysis,
+        user_message=user_message,
+    )
+    return TurnDecisionResult(
+        decision=TurnDecisionOutput(
+            turn_analysis=TurnAnalysis(
+                intent=analysis.user_intent,
+                behavior_signals=BehaviorSignals(
+                    **analysis.behavior_signals.model_dump()
+                ),
+                detected_events=confirmed_risks,
+            ),
+            state_delta=SimulationStateDelta(
+                **analysis.state_delta.model_dump()
+            ),
+            response_policy=simulation_decision.response_policy,
+            confidence=simulation_decision.confidence,
+        ),
+        updated_state=turn_state_result.updated_state,
+    )
+
+
+def _confirmed_turn_risks(
+    *,
+    analysis: TurnStateAnalysis,
+    user_message: str,
+) -> list[str]:
+    """Only expose risk labels that also have deterministic semantic support."""
+
+    semantic_pressure = contains_affirmed_any(
+        user_message,
+        (
+            *PRESSURE_WORDS,
+            "威胁",
+            "逼你",
+            "必须答应",
+            "or else",
+            "threat",
+        ),
+    )
+    semantic_insult = contains_affirmed_any(
+        user_message,
+        ("废物", "蠢", "滚", "没用", "都是你的错", "insult", "stupid"),
+    )
+    semantic_deception = contains_affirmed_any(
+        user_message,
+        ("骗", "撒谎", "隐瞒", "deceive", "lied"),
+    )
+    semantic_refusal = contains_affirmed_any(
+        user_message,
+        ("拒绝", "不接受", "不愿意", "不想", "不要再", "别再"),
+    )
+    confirmed: list[str] = []
+    explicit_risk_events = [
+        value
+        for value in analysis.detected_events
+        if any(
+            marker in value.lower()
+            for marker in (
+                "pressure",
+                "threat",
+                "boundary",
+                "insult",
+                "施压",
+                "威胁",
+                "越界",
+                "侮辱",
+            )
+        )
+    ]
+    for value in [*analysis.risk_flags, *explicit_risk_events]:
+        normalized = value.lower()
+        is_pressure_risk = any(
+            marker in normalized
+            for marker in (
+                "pressure",
+                "threat",
+                "boundary",
+                "施压",
+                "威胁",
+                "越界",
+                "催促",
+            )
+        )
+        is_insult_risk = any(
+            marker in normalized
+            for marker in ("insult", "侮辱", "辱骂")
+        )
+        is_deception_risk = any(
+            marker in normalized
+            for marker in ("deception", "deceive", "欺骗", "撒谎", "隐瞒")
+        )
+        is_refusal_risk = any(
+            marker in normalized
+            for marker in ("refusal", "reject", "拒绝", "停止推进")
+        )
+        if is_pressure_risk and not semantic_pressure:
+            continue
+        if is_insult_risk and not semantic_insult:
+            continue
+        if is_deception_risk and not semantic_deception:
+            continue
+        if is_refusal_risk and not semantic_refusal:
+            continue
+        if not any(
+            (is_pressure_risk, is_insult_risk, is_deception_risk, is_refusal_risk)
+        ):
+            continue
+        confirmed.append(value)
+    return _unique_strings(confirmed, limit=8)
+
+
+def _style_adjustment_count(
+    profile: SimulationAdjustmentProfile,
+) -> int:
+    style = profile.style
+    return sum(
+        (
+            style.length_scale != 1.0,
+            style.explanation_ratio_delta != 0.0,
+            style.punctuation_match_strength != 0.5,
+            style.prevent_unplanned_commitment,
+        )
     )
 
 

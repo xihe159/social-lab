@@ -11,9 +11,9 @@ from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-SimulationAgentVersion = Literal["v1", "v2"]
+SimulationAgentVersion = Literal["v1", "v2", "v2.1"]
 DEFAULT_SIMULATION_AGENT_VERSION: SimulationAgentVersion = "v1"
-SUPPORTED_SIMULATION_AGENT_VERSIONS = {"v1", "v2"}
+SUPPORTED_SIMULATION_AGENT_VERSIONS = {"v1", "v2", "v2.1"}
 
 
 class SimulationAgentRunner(Protocol):
@@ -49,7 +49,7 @@ def create_simulation_agent(
 ) -> tuple[SimulationAgentVersion, SimulationAgentRunner]:
     selected_version = resolve_simulation_agent_version(version)
 
-    if selected_version == "v2":
+    if selected_version in {"v2", "v2.1"}:
         return selected_version, SimulationAgentV2()
 
     return selected_version, SimulationAgentV1()

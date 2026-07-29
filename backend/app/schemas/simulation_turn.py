@@ -19,6 +19,7 @@ class SimulationTurnSchema(BaseModel):
 
 
 class SessionRuntimeMeta(SimulationTurnSchema):
+    turn_state_fallback_used: bool = False
     decision_fallback_used: bool = False
     strategy_fallback_used: bool = False
     generator_retry_count: int = Field(default=0, ge=0, le=1)

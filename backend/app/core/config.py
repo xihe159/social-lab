@@ -115,10 +115,10 @@ class Settings(BaseSettings):
     # Agent 功能开关
     # ------------------------------------------------------------------
 
-    simulation_agent_version: Literal["v1", "v2"] = "v1"
+    simulation_agent_version: Literal["v1", "v2", "v2.1"] = "v1"
 
     # 暂时保留为字符串，兼容项目现有执行模式
-    evaluation_execution_mode: str = "development_sync"
+    evaluation_execution_mode: str = "auto"
 
     # ------------------------------------------------------------------
     # 字段规范化

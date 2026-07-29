@@ -11,12 +11,25 @@ class SimulationAdjustmentSchema(BaseModel):
     )
 
 
+class SimulationStyleAdjustment(SimulationAdjustmentSchema):
+    """Temporary generation preferences; never Persona or behavioral state."""
+
+    length_scale: float = Field(default=1.0, ge=0.85, le=1.15)
+    explanation_ratio_delta: float = Field(default=0.0, ge=-0.15, le=0.15)
+    punctuation_match_strength: float = Field(default=0.5, ge=0.0, le=1.0)
+    prevent_unplanned_commitment: bool = False
+
+
 class SimulationAdjustmentProfile(SimulationAdjustmentSchema):
     """Evaluation-derived controls that are temporary to one simulation session."""
 
     session_id: str = Field(min_length=1, max_length=120)
-    style_adjustments: list[str]
-    strategy_adjustments: list[str]
+    style: SimulationStyleAdjustment = Field(
+        default_factory=SimulationStyleAdjustment
+    )
+    # Deprecated compatibility fields. V2.1 does not execute these strings.
+    style_adjustments: list[str] = Field(default_factory=list)
+    strategy_adjustments: list[str] = Field(default_factory=list)
     source_evaluation_ids: list[str]
     expires_after_turns: int = Field(ge=1, le=10)
 

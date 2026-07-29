@@ -8,6 +8,7 @@ from app.schemas.evaluation import (
     EvaluationScoreItem,
     EvaluationVerdict,
     FailureAttribution,
+    HardErrorCode,
     InternalCorrection,
     SimulationEvaluationRequest,
     SimulationEvaluationResponse,
@@ -15,7 +16,7 @@ from app.schemas.evaluation import (
 from app.services.simulation_quality import weighted_simulation_score
 
 
-EVALUATION_PROMPT_VERSION = "evaluation-v2.1-phase5-session-signals"
+EVALUATION_PROMPT_VERSION = "evaluation-v2.5-v21-hard-errors-only"
 _DIMENSIONS = (
     "persona_fidelity",
     "dyadic_consistency",
@@ -39,6 +40,30 @@ _INVENTED_TRAIT_MARKERS = (
     "编造人物特征",
     "虚构人物特征",
 )
+_HARD_ERROR_MARKERS: dict[HardErrorCode, tuple[str, ...]] = {
+    HardErrorCode.PERSONA_VIOLATION: (
+        "persona_violation",
+        "明显违反人物",
+        "严重违背persona",
+    ),
+    HardErrorCode.MEMORY_CONTRADICTION: (
+        "memory_contradiction",
+        "与已确认记忆冲突",
+        "与memory冲突",
+    ),
+    HardErrorCode.INVENTED_PERSONA_TRAIT: _INVENTED_TRAIT_MARKERS,
+    HardErrorCode.ACTION_TEXT_CONTRADICTION: (
+        "action_text_contradiction",
+        "动作与文本矛盾",
+        "action与回复矛盾",
+    ),
+    HardErrorCode.UNGROUNDED_GUIDANCE_DEVIATION: (
+        "ungrounded_guidance_deviation",
+        "无证据偏离guidance",
+        "无依据偏离策略建议",
+        "policy_id_mismatch",
+    ),
+}
 
 
 class EvaluationAgent:
@@ -82,17 +107,28 @@ class EvaluationAgent:
                 self._normalize_score_item(getattr(result, dimension)),
             )
 
-        if (
-            request.simulation_result.policy_id
-            != request.response_policy.policy_id
-        ):
+        expected_guidance_id = (
+            request.response_guidance.guidance_id
+            if request.response_guidance is not None
+            else request.response_policy.policy_id
+        )
+        actual_guidance_id = (
+            request.simulation_result.guidance_id
+            or request.simulation_result.policy_id
+        )
+        if actual_guidance_id != expected_guidance_id:
             result.strategy_adherence.score = 0
             self._append_unique(
                 result.critical_issues,
-                "POLICY_ID_MISMATCH: Simulation 结果未使用本轮 Response Policy。",
+                "POLICY_ID_MISMATCH: Simulation 结果未关联本轮 Response Guidance。",
+            )
+            self._append_hard_error(
+                result,
+                HardErrorCode.UNGROUNDED_GUIDANCE_DEVIATION,
             )
 
         result.critical_issues = self._clean_list(result.critical_issues)
+        self._infer_hard_errors(result)
         result.session_learning_signals = self._clean_internal_list(
             result.session_learning_signals
         )
@@ -116,8 +152,15 @@ class EvaluationAgent:
             chat_record_available=chat_record_available,
         )
 
-        invented_trait = self._contains_invented_trait(result.critical_issues)
+        invented_trait = (
+            HardErrorCode.INVENTED_PERSONA_TRAIT in result.hard_errors
+            or self._contains_invented_trait(result.critical_issues)
+        )
         if invented_trait:
+            self._append_hard_error(
+                result,
+                HardErrorCode.INVENTED_PERSONA_TRAIT,
+            )
             result.simulation_success_score = min(
                 result.simulation_success_score,
                 59,
@@ -155,22 +198,29 @@ class EvaluationAgent:
         if context_gap and result.confidence < 0.6:
             return FailureAttribution.CONTEXT_GAP
         if (
-            result.simulation_success_score >= 75
-            and result.persona_fidelity.score >= 60
-            and result.strategy_adherence.score >= 55
-            and not result.critical_issues
+            not result.hard_errors
         ):
             return FailureAttribution.NONE
         if result.failure_attribution != FailureAttribution.NONE:
             return result.failure_attribution
 
-        persona_failed = result.persona_fidelity.score < 60
-        execution_failed = result.strategy_adherence.score < 55
-        if persona_failed and execution_failed:
+        strategy_errors = {
+            HardErrorCode.PERSONA_VIOLATION,
+            HardErrorCode.MEMORY_CONTRADICTION,
+            HardErrorCode.INVENTED_PERSONA_TRAIT,
+            HardErrorCode.UNGROUNDED_GUIDANCE_DEVIATION,
+        }
+        has_strategy_error = bool(set(result.hard_errors) & strategy_errors)
+        has_execution_error = (
+            HardErrorCode.ACTION_TEXT_CONTRADICTION in result.hard_errors
+        )
+        if has_strategy_error and has_execution_error:
             return FailureAttribution.MIXED
-        if persona_failed:
+        if has_strategy_error:
             return FailureAttribution.STRATEGY_ERROR
-        return FailureAttribution.SIMULATION_EXECUTION_ERROR
+        if has_execution_error:
+            return FailureAttribution.SIMULATION_EXECUTION_ERROR
+        return FailureAttribution.NONE
 
     def _resolve_verdict(
         self,
@@ -184,27 +234,24 @@ class EvaluationAgent:
 
         if context_gap and result.confidence < 0.6:
             return EvaluationVerdict.INSUFFICIENT_EVIDENCE
-        if invented_trait or score < 60:
-            return EvaluationVerdict.REPLAN_AND_REGENERATE
-        if result.persona_fidelity.score < 60:
-            if attribution in {
-                FailureAttribution.STRATEGY_ERROR,
-                FailureAttribution.MIXED,
-            }:
-                return EvaluationVerdict.REPLAN_AND_REGENERATE
+        if not result.hard_errors:
+            return (
+                EvaluationVerdict.ACCEPT
+                if score >= 85
+                else EvaluationVerdict.ACCEPT_WITH_FEEDBACK
+            )
+        if (
+            result.hard_errors
+            == [HardErrorCode.ACTION_TEXT_CONTRADICTION]
+            or (
+                set(result.hard_errors)
+                == {HardErrorCode.ACTION_TEXT_CONTRADICTION}
+            )
+        ):
             return EvaluationVerdict.REVISE_SIMULATION
-        if result.strategy_adherence.score < 55:
+        if attribution == FailureAttribution.SIMULATION_EXECUTION_ERROR:
             return EvaluationVerdict.REVISE_SIMULATION
-        if score < 75 or result.critical_issues:
-            if attribution in {
-                FailureAttribution.STRATEGY_ERROR,
-                FailureAttribution.MIXED,
-            }:
-                return EvaluationVerdict.REPLAN_AND_REGENERATE
-            return EvaluationVerdict.REVISE_SIMULATION
-        if score < 85:
-            return EvaluationVerdict.ACCEPT_WITH_FEEDBACK
-        return EvaluationVerdict.ACCEPT
+        return EvaluationVerdict.REPLAN_AND_REGENERATE
 
     def _route_corrections(self, result: SimulationEvaluationResponse) -> None:
         attribution = result.failure_attribution
@@ -275,6 +322,24 @@ class EvaluationAgent:
     def _contains_invented_trait(issues: list[str]) -> bool:
         combined = " ".join(issues).lower()
         return any(marker in combined for marker in _INVENTED_TRAIT_MARKERS)
+
+    def _infer_hard_errors(
+        self,
+        result: SimulationEvaluationResponse,
+    ) -> None:
+        combined = " ".join(result.critical_issues).lower()
+        for code, markers in _HARD_ERROR_MARKERS.items():
+            if any(marker.lower() in combined for marker in markers):
+                self._append_hard_error(result, code)
+        result.hard_errors = list(dict.fromkeys(result.hard_errors))[:5]
+
+    @staticmethod
+    def _append_hard_error(
+        result: SimulationEvaluationResponse,
+        code: HardErrorCode,
+    ) -> None:
+        if code not in result.hard_errors:
+            result.hard_errors.append(code)
 
     def _clean_internal_list(self, values: list[str]) -> list[str]:
         cleaned = self._clean_list(values)

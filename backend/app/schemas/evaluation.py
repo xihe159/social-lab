@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.memory import SessionMemory
 from app.schemas.persona_v2 import PersonaModelV2
 from app.schemas.simulation_state import RelationshipStateV2
-from app.schemas.strategy import StrategyMessage, TargetResponsePolicy
+from app.schemas.strategy import (
+    StrategyMessage,
+    TargetResponseGuidance,
+    TargetResponsePolicy,
+)
 from app.schemas.feedback import InternalCorrection
 from app.schemas.runtime_metrics import EvaluationRunMode
 
@@ -42,6 +46,14 @@ class FeedbackAction(str, Enum):
     REPLAN_AND_REGENERATE = "replan_and_regenerate"
 
 
+class HardErrorCode(str, Enum):
+    PERSONA_VIOLATION = "persona_violation"
+    MEMORY_CONTRADICTION = "memory_contradiction"
+    INVENTED_PERSONA_TRAIT = "invented_persona_trait"
+    ACTION_TEXT_CONTRADICTION = "action_text_contradiction"
+    UNGROUNDED_GUIDANCE_DEVIATION = "ungrounded_guidance_deviation"
+
+
 class SimulationEvaluationResult(EvaluationSchema):
     """The generated target-person reaction evaluated by EvaluationAgent V2."""
 
@@ -52,6 +64,7 @@ class SimulationEvaluationResult(EvaluationSchema):
     state_delta: dict[str, float | int]
     risk_flags: list[str]
     policy_id: str
+    guidance_id: str = ""
     used_evidence_refs: list[str]
 
     @field_validator("risk_flags", "used_evidence_refs")
@@ -79,7 +92,8 @@ class SimulationEvaluationRequest(EvaluationSchema):
     recent_messages: list[StrategyMessage] = Field(max_length=12)
     user_message: str = Field(min_length=1, max_length=4000)
 
-    response_policy: TargetResponsePolicy
+    response_guidance: TargetResponseGuidance | None = None
+    response_policy: TargetResponsePolicy | None = None
     simulation_result: SimulationEvaluationResult
 
     strategy_prompt_version: str = Field(min_length=1, max_length=120)
@@ -93,6 +107,12 @@ class SimulationEvaluationRequest(EvaluationSchema):
         if not cleaned:
             raise ValueError("user_message must not be blank")
         return cleaned
+
+    @model_validator(mode="after")
+    def require_guidance_or_legacy_policy(self):
+        if self.response_guidance is None and self.response_policy is None:
+            raise ValueError("response_guidance or response_policy is required")
+        return self
 
 
 class EvaluationScoreItem(EvaluationSchema):
@@ -120,6 +140,7 @@ class SimulationEvaluationResponse(EvaluationSchema):
     evidence_grounding: EvaluationScoreItem
 
     critical_issues: list[str]
+    hard_errors: list[HardErrorCode] = Field(default_factory=list, max_length=5)
     correction_for_strategy: InternalCorrection | None
     correction_for_simulation: InternalCorrection | None
     session_learning_signals: list[str]
@@ -147,3 +168,4 @@ class SessionEvaluationMeta(EvaluationSchema):
     correction_applied: bool = False
     evaluator_failed: bool = False
     final_evaluator_failed: bool = False
+    hard_error_count: int = Field(default=0, ge=0, le=5)

@@ -1,22 +1,28 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 
+from app.core.config import get_settings
 from app.schemas.runtime_metrics import EvaluationExecutionMode
 from app.schemas.simulation_decision import TurnDecisionResult
-from app.schemas.strategy import ResponseAction, TargetResponsePolicy
+from app.schemas.strategy import ResponseMode, TargetResponseGuidance
 from app.services.simulation_adjustment_manager import SimulationAdjustmentManager
 
 
 logger = logging.getLogger(__name__)
 
-_CRITICAL_ACTIONS = {
-    ResponseAction.REFUSE,
-    ResponseAction.SET_BOUNDARY,
-    ResponseAction.NO_REPLY,
-    ResponseAction.END_CONVERSATION,
+_CRITICAL_MODES = {
+    ResponseMode.DECLINE,
+    ResponseMode.SET_BOUNDARY,
+    ResponseMode.NO_REPLY,
+    ResponseMode.END_CONVERSATION,
+}
+_CRITICAL_SIMULATION_ACTIONS = {
+    "SET_BOUNDARY",
+    "CONFRONT",
+    "READ_NO_REPLY",
+    "END_CONVERSATION",
 }
 _SUPPORTED_MODES = {"development_sync", "production_hybrid"}
 
@@ -30,14 +36,16 @@ class EvaluationExecutionDecision:
 def resolve_evaluation_execution_mode(
     value: str | None = None,
 ) -> EvaluationExecutionMode:
-    configured = value if value is not None else os.getenv(
-        "EVALUATION_EXECUTION_MODE"
+    settings = get_settings()
+    configured = (
+        value
+        if value is not None
+        else settings.evaluation_execution_mode
     )
-    if configured is None:
-        app_environment = os.getenv("APP_ENV", "development").strip().lower()
+    if not configured or configured.strip().lower() == "auto":
         configured = (
             "production_hybrid"
-            if app_environment in {"production", "prod"}
+            if settings.app_env == "production"
             else "development_sync"
         )
     normalized = configured.strip().lower()
@@ -68,7 +76,7 @@ class EvaluationExecutionPolicy:
         self,
         *,
         session_id: str,
-        strategy_policy: TargetResponsePolicy,
+        strategy_guidance: TargetResponseGuidance,
         decision_result: TurnDecisionResult,
         adjustment_manager: SimulationAdjustmentManager,
         user_message: str = "",
@@ -77,10 +85,15 @@ class EvaluationExecutionPolicy:
             return EvaluationExecutionDecision(True, ("development_mode",))
 
         reasons: list[str] = []
-        if strategy_policy.confidence < 0.70:
+        if strategy_guidance.confidence < 0.70:
             reasons.append("low_strategy_confidence")
-        if strategy_policy.action in _CRITICAL_ACTIONS:
-            reasons.append(f"critical_action:{strategy_policy.action.value}")
+        if strategy_guidance.recommended_mode in _CRITICAL_MODES:
+            reasons.append(
+                f"critical_guidance:{strategy_guidance.recommended_mode.value}"
+            )
+        simulation_action = decision_result.decision.response_policy.action
+        if simulation_action in _CRITICAL_SIMULATION_ACTIONS:
+            reasons.append(f"critical_simulation_action:{simulation_action}")
 
         delta_values = list(
             decision_result.decision.state_delta.model_dump().values()
