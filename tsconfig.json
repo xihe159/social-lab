@@ -38,11 +38,12 @@
   ],
   "exclude": [
     "node_modules",
+    "video",
     "app/app",
     "components/components",
     "docs/docs",
     "lib/lib",
     "reference-media/reference-media",
-    ".codex-scratch-design"
+    ".codex-scratch-design",
   ]
 }

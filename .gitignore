@@ -26,3 +26,8 @@ tsconfig.tsbuildinfo
 # Runtime caches
 .cache/
 .codex-scratch-design/
+
+# Local AI coding skills for video development
+video/.codex/
+video/.github/skills/
+video/.agents/skills/
