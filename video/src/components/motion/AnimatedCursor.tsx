@@ -1,9 +1,5 @@
 import type {CSSProperties} from "react";
-import {
-  Easing,
-  interpolate,
-  useCurrentFrame,
-} from "remotion";
+import {Easing, interpolate, useCurrentFrame} from "remotion";
 
 import {COLORS} from "../../design/tokens";
 
@@ -44,15 +40,15 @@ const getClickProgress = (
     }
 
     const middle = (click.start + click.end) / 2;
-
-    const progress = interpolate(
-      frame,
-      [click.start, middle, click.end],
-      [0, 1, 0],
-      CLAMP,
+    result = Math.max(
+      result,
+      interpolate(
+        frame,
+        [click.start, middle, click.end],
+        [0, 1, 0],
+        CLAMP,
+      ),
     );
-
-    result = Math.max(result, progress);
   }
 
   return result;
@@ -69,29 +65,23 @@ export const AnimatedCursor = ({
   const frame = useCurrentFrame();
 
   if (points.length < 2) {
-    throw new Error(
-      "AnimatedCursor requires at least two cursor points.",
-    );
+    throw new Error("AnimatedCursor requires at least two cursor points.");
   }
 
   const inputRange = points.map((point) => point.frame);
-  const xOutputRange = points.map((point) => point.x);
-  const yOutputRange = points.map((point) => point.y);
-
   const x = interpolate(
     frame,
     inputRange,
-    xOutputRange,
+    points.map((point) => point.x),
     {
       ...CLAMP,
       easing: Easing.bezier(0.16, 1, 0.3, 1),
     },
   );
-
   const y = interpolate(
     frame,
     inputRange,
-    yOutputRange,
+    points.map((point) => point.y),
     {
       ...CLAMP,
       easing: Easing.bezier(0.16, 1, 0.3, 1),
@@ -104,38 +94,16 @@ export const AnimatedCursor = ({
     [0, 1],
     CLAMP,
   );
-
   const exitOpacity = interpolate(
     frame,
     [visibleUntil - 8, visibleUntil],
     [1, 0],
     CLAMP,
   );
-
-  const opacity = Math.min(
-    entranceOpacity,
-    exitOpacity,
-  );
-
-  const clickProgress = getClickProgress(
-    frame,
-    clicks,
-  );
-
-  const cursorScale = interpolate(
-    clickProgress,
-    [0, 1],
-    [1, 0.86],
-    CLAMP,
-  );
-
-  const ringScale = interpolate(
-    clickProgress,
-    [0, 1],
-    [0.4, 1.7],
-    CLAMP,
-  );
-
+  const opacity = Math.min(entranceOpacity, exitOpacity);
+  const clickProgress = getClickProgress(frame, clicks);
+  const cursorScale = interpolate(clickProgress, [0, 1], [1, 0.86], CLAMP);
+  const ringScale = interpolate(clickProgress, [0, 1], [0.4, 1.7], CLAMP);
   const ringOpacity = interpolate(
     clickProgress,
     [0, 0.35, 1],
@@ -149,12 +117,11 @@ export const AnimatedCursor = ({
         position: "absolute",
         left: x,
         top: y,
-        zIndex: 200,
+        zIndex: 300,
         width: size,
         height: size,
         opacity,
-        transform:
-          `translate(-8px, -7px) scale(${cursorScale})`,
+        transform: `translate(-8px, -7px) scale(${cursorScale})`,
         transformOrigin: "8px 7px",
         pointerEvents: "none",
         willChange: "transform, opacity, left, top",
@@ -175,7 +142,6 @@ export const AnimatedCursor = ({
           transformOrigin: "center",
         }}
       />
-
       <svg
         width={size}
         height={size}
@@ -184,8 +150,7 @@ export const AnimatedCursor = ({
         xmlns="http://www.w3.org/2000/svg"
         style={{
           overflow: "visible",
-          filter:
-            "drop-shadow(0 5px 7px rgba(35, 36, 58, 0.22))",
+          filter: "drop-shadow(0 5px 7px rgba(35, 36, 58, 0.22))",
         }}
       >
         <path
@@ -199,4 +164,3 @@ export const AnimatedCursor = ({
     </div>
   );
 };
-

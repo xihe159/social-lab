@@ -1,11 +1,6 @@
 import {Check} from "lucide-react";
 
-import {
-  COLORS,
-  LAYOUT,
-  RADII,
-  TYPOGRAPHY,
-} from "../../design/tokens";
+import {COLORS, LAYOUT, RADII, TYPOGRAPHY} from "../../design/tokens";
 
 type WorkflowStep = {
   number: number;
@@ -14,31 +9,11 @@ type WorkflowStep = {
 };
 
 const STEPS: readonly WorkflowStep[] = [
-  {
-    number: 1,
-    title: "场景",
-    description: "定义沟通目标",
-  },
-  {
-    number: 2,
-    title: "对方",
-    description: "补充对象信息",
-  },
-  {
-    number: 3,
-    title: "画像",
-    description: "生成关系分身",
-  },
-  {
-    number: 4,
-    title: "模拟",
-    description: "开始沟通练习",
-  },
-  {
-    number: 5,
-    title: "报告",
-    description: "查看分析建议",
-  },
+  {number: 1, title: "场景", description: "定义沟通目标"},
+  {number: 2, title: "对方", description: "补充对象信息"},
+  {number: 3, title: "画像", description: "生成关系分身"},
+  {number: 4, title: "模拟", description: "开始沟通练习"},
+  {number: 5, title: "报告", description: "查看分析建议"},
 ];
 
 export type WorkflowSidebarProps = {
@@ -63,16 +38,9 @@ export const WorkflowSidebar = ({
         opacity: progress,
         transform: `translateX(${-20 * (1 - progress)}px)`,
         fontFamily: TYPOGRAPHY.fontFamily,
-        willChange: "transform, opacity",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 14,
-        }}
-      >
+      <div style={{display: "flex", alignItems: "center", gap: 14}}>
         <div
           style={{
             width: 46,
@@ -88,7 +56,6 @@ export const WorkflowSidebar = ({
         >
           SL
         </div>
-
         <div>
           <div
             style={{
@@ -99,7 +66,6 @@ export const WorkflowSidebar = ({
           >
             Social Lab
           </div>
-
           <div
             style={{
               marginTop: 4,
@@ -113,13 +79,7 @@ export const WorkflowSidebar = ({
         </div>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gap: 10,
-          marginTop: 44,
-        }}
-      >
+      <div style={{display: "grid", gap: 10, marginTop: 44}}>
         {STEPS.map((step) => {
           const isActive = step.number === activeStep;
           const isComplete = step.number < activeStep;
@@ -135,9 +95,7 @@ export const WorkflowSidebar = ({
                 boxSizing: "border-box",
                 padding: "11px 13px",
                 borderRadius: RADII.card,
-                backgroundColor: isActive
-                  ? COLORS.lavender
-                  : "transparent",
+                backgroundColor: isActive ? COLORS.lavender : "transparent",
               }}
             >
               <div
@@ -149,9 +107,7 @@ export const WorkflowSidebar = ({
                   placeItems: "center",
                   borderRadius: 12,
                   backgroundColor:
-                    isActive || isComplete
-                      ? COLORS.lime
-                      : COLORS.border,
+                    isActive || isComplete ? COLORS.lime : COLORS.border,
                   color:
                     isActive || isComplete
                       ? COLORS.limeText
@@ -160,13 +116,8 @@ export const WorkflowSidebar = ({
                   fontWeight: TYPOGRAPHY.weight.extraBold,
                 }}
               >
-                {isComplete ? (
-                  <Check size={18} strokeWidth={2.7} />
-                ) : (
-                  step.number
-                )}
+                {isComplete ? <Check size={18} strokeWidth={2.7} /> : step.number}
               </div>
-
               <div>
                 <div
                   style={{
@@ -177,13 +128,11 @@ export const WorkflowSidebar = ({
                 >
                   {step.title}
                 </div>
-
                 <div
                   style={{
                     marginTop: 4,
                     color: COLORS.textSecondary,
                     fontSize: 13,
-                    fontWeight: TYPOGRAPHY.weight.regular,
                   }}
                 >
                   {step.description}

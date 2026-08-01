@@ -1,8 +1,6 @@
 /**
- * Social Lab 视频设计系统
- *
- * 这些 Token 来自 V2 策划稿对原项目 UI 的总结。
- * 场景组件应优先引用这里的值，不要重复散落色值、阴影和字体栈。
+ * Social Lab 视频设计系统。
+ * 统一维护颜色、排版、圆角、阴影、布局与 Remotion 动效参数。
  */
 
 export const VIDEO = {
@@ -23,6 +21,8 @@ export const COLORS = {
 
   border: "#E7E8F2",
   borderStrong: "#D9DBE9",
+  formWarmBorder: "#DED9CE",
+  progressTrack: "#E6E3DA",
 
   brand: "#2F2F63",
   brandPressed: "#25254F",
@@ -48,12 +48,12 @@ export const COLORS = {
   previewRed: "#DE6B64",
   previewSlate: "#8FA0B8",
 
-  // Scene 04
-  formWarmBorder: "#DED9CE",
-  progressTrack: "#E6E3DA",
   optionSelected: "#DEF7E8",
   optionSelectedBorder: "#4FB77E",
   optionSelectedText: "#236B4A",
+
+  mechanismLine: "#CED1DF",
+  mechanismPanel: "#FBFCFF",
 } as const;
 
 export const TYPOGRAPHY = {
@@ -116,31 +116,26 @@ export const LAYOUT = {
   contentWidth: 860,
   formWidth: 760,
   browserChromeHeight: 48,
-
   landingContentWidth: 1320,
   landingHeroHeight: 520,
 } as const;
 
-/**
- * 常用 Remotion 动效参数。
- * 保持高阻尼、低回弹，符合 Social Lab 克制温和的 UI 气质。
- */
 export const MOTION = {
   gentleSpring: {
     damping: 200,
     stiffness: 120,
     mass: 0.7,
+    overshootClamping: true,
   },
 
   cardSpring: {
     damping: 180,
     stiffness: 140,
     mass: 0.8,
+    overshootClamping: true,
   },
 
   pressScale: 0.988,
   smallLift: 18,
   mediumLift: 24,
 } as const;
-
-

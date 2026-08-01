@@ -6,24 +6,15 @@ export type ProgressTrackProps = {
   stepText?: string;
 };
 
-const clamp01 = (value: number): number => {
-  return Math.max(0, Math.min(1, value));
-};
-
 export const ProgressTrack = ({
   progress,
   label = "设置沟通场景",
   stepText = "步骤 1 / 5",
 }: ProgressTrackProps) => {
-  const safeProgress = clamp01(progress);
+  const safeProgress = Math.max(0, Math.min(1, progress));
 
   return (
-    <div
-      style={{
-        width: "100%",
-        fontFamily: TYPOGRAPHY.fontFamily,
-      }}
-    >
+    <div style={{width: "100%", fontFamily: TYPOGRAPHY.fontFamily}}>
       <div
         style={{
           display: "flex",
@@ -38,7 +29,6 @@ export const ProgressTrack = ({
         <span>{label}</span>
         <span>{stepText}</span>
       </div>
-
       <div
         style={{
           width: "100%",
