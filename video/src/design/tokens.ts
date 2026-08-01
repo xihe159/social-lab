@@ -13,50 +13,47 @@ export const VIDEO = {
 } as const;
 
 export const COLORS = {
- // 页面与表面
   page: "#F4F6FB",
   pageSoft: "#F8F9FD",
   surface: "#FFFFFF",
 
-  // 文字
   textPrimary: "#23243A",
   textSecondary: "#6F7190",
   textMuted: "#9A9BB2",
 
-  // 结构
   border: "#E7E8F2",
   borderStrong: "#D9DBE9",
 
-  // 品牌
   brand: "#2F2F63",
   brandPressed: "#25254F",
 
-  // 薰衣草
   lavender: "#ECEBFD",
   lavenderSurface: "#F0EDFF",
 
-  // 青柠
   lime: "#C8F47A",
   limeSoft: "#ECFFD2",
   limeText: "#2D4630",
 
-  // CTA
   cta: "#4F9D7A",
   ctaHover: "#438A6B",
 
-  // 提醒
   riskSoft: "#F8ECE8",
   warningSoft: "#FFF6DF",
 
-  // 场景选择模态框
   modalYellow: "#FFF05B",
   modalDark: "#15182B",
 
-  // 首页 Preview 概率条
   previewBlue: "#4563F4",
   previewAmber: "#F0B84F",
   previewRed: "#DE6B64",
   previewSlate: "#8FA0B8",
+
+  // Scene 04
+  formWarmBorder: "#DED9CE",
+  progressTrack: "#E6E3DA",
+  optionSelected: "#DEF7E8",
+  optionSelectedBorder: "#4FB77E",
+  optionSelectedText: "#236B4A",
 } as const;
 
 export const TYPOGRAPHY = {

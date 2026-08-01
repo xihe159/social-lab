@@ -2,7 +2,6 @@ import {ArrowRight, Sparkles} from "lucide-react";
 
 import {
   COLORS,
-  RADII,
   SHADOWS,
   SPACING,
   TYPOGRAPHY,

@@ -56,8 +56,8 @@ export const BrandLandingScene = ({
         damping: MOTION.gentleSpring.damping,
         stiffness: MOTION.gentleSpring.stiffness,
         mass: MOTION.gentleSpring.mass,
+        overshootClamping: true,
       },
-      overshootClamping: true,
     });
   };
 

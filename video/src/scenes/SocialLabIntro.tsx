@@ -88,8 +88,8 @@ export const SocialLabIntro = () => {
       damping: MOTION.gentleSpring.damping,
       stiffness: MOTION.gentleSpring.stiffness,
       mass: MOTION.gentleSpring.mass,
+      overshootClamping: true,
     },
-    overshootClamping: true,
   });
 
   const cardScale = interpolate(
