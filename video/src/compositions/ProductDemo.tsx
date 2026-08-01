@@ -1,5 +1,6 @@
 import {AbsoluteFill, Sequence} from "remotion";
 
+import {ProductAudioTrack} from "../audio/ProductAudioTrack";
 import {AgentMechanismScene} from "../scenes/AgentMechanismScene";
 import {BrandLandingScene} from "../scenes/BrandLandingScene";
 import {ConversationScene} from "../scenes/ConversationScene";
@@ -14,6 +15,8 @@ import {ScenarioPickerScene} from "../scenes/ScenarioPickerScene";
 import {SocialLabIntro} from "../scenes/SocialLabIntro";
 import {timeline} from "../timeline/product-film";
 
+const SCENE_PREMOUNT_FRAMES = 12;
+
 export const ProductDemo = () => {
   return (
     <AbsoluteFill>
@@ -27,6 +30,7 @@ export const ProductDemo = () => {
       <Sequence
         from={timeline.landing.from}
         durationInFrames={timeline.landing.duration}
+        premountFor={SCENE_PREMOUNT_FRAMES}
         name="Scene 02 - Brand Landing"
       >
         <BrandLandingScene />
@@ -35,6 +39,7 @@ export const ProductDemo = () => {
       <Sequence
         from={timeline.picker.from}
         durationInFrames={timeline.picker.duration}
+        premountFor={SCENE_PREMOUNT_FRAMES}
         name="Scene 03 - Scenario Picker"
       >
         <ScenarioPickerScene />
@@ -43,6 +48,7 @@ export const ProductDemo = () => {
       <Sequence
         from={timeline.scenarioForm.from}
         durationInFrames={timeline.scenarioForm.duration}
+        premountFor={SCENE_PREMOUNT_FRAMES}
         name="Scene 04 - Scenario Form"
       >
         <ScenarioFormScene />
@@ -51,6 +57,7 @@ export const ProductDemo = () => {
       <Sequence
         from={timeline.personSetup.from}
         durationInFrames={timeline.personSetup.duration}
+        premountFor={SCENE_PREMOUNT_FRAMES}
         name="Scene 05 - Person Setup"
       >
         <PersonSetupScene />
@@ -59,6 +66,7 @@ export const ProductDemo = () => {
       <Sequence
         from={timeline.persona.from}
         durationInFrames={timeline.persona.duration}
+        premountFor={SCENE_PREMOUNT_FRAMES}
         name="Scene 06 - Persona Reveal"
       >
         <PersonaRevealScene />
@@ -67,6 +75,7 @@ export const ProductDemo = () => {
       <Sequence
         from={timeline.conversation.from}
         durationInFrames={timeline.conversation.duration}
+        premountFor={SCENE_PREMOUNT_FRAMES}
         name="Scene 07 - Conversation"
       >
         <ConversationScene />
@@ -75,7 +84,8 @@ export const ProductDemo = () => {
       <Sequence
         from={timeline.mechanism.from}
         durationInFrames={timeline.mechanism.duration}
-        name="Scene 08 - Mechanism"
+        premountFor={SCENE_PREMOUNT_FRAMES}
+        name="Scene 08 - Agent Mechanism"
       >
         <AgentMechanismScene />
       </Sequence>
@@ -83,6 +93,7 @@ export const ProductDemo = () => {
       <Sequence
         from={timeline.dynamics.from}
         durationInFrames={timeline.dynamics.duration}
+        premountFor={SCENE_PREMOUNT_FRAMES}
         name="Scene 09 - Dynamics"
       >
         <DynamicsScene />
@@ -91,7 +102,8 @@ export const ProductDemo = () => {
       <Sequence
         from={timeline.report.from}
         durationInFrames={timeline.report.duration}
-        name="Scene 10 - Report"
+        premountFor={SCENE_PREMOUNT_FRAMES}
+        name="Scene 10 - Report Overview"
       >
         <ReportOverviewScene />
       </Sequence>
@@ -99,6 +111,7 @@ export const ProductDemo = () => {
       <Sequence
         from={timeline.rewrite.from}
         durationInFrames={timeline.rewrite.duration}
+        premountFor={SCENE_PREMOUNT_FRAMES}
         name="Scene 11 - Rewrite and Retry"
       >
         <RewriteRetryScene />
@@ -107,10 +120,19 @@ export const ProductDemo = () => {
       <Sequence
         from={timeline.outro.from}
         durationInFrames={timeline.outro.duration}
+        premountFor={SCENE_PREMOUNT_FRAMES}
         name="Scene 12 - Outro"
       >
         <OutroScene />
       </Sequence>
+
+      {/*
+       * 音频只挂载一次，并使用完整视频的全局帧坐标。
+       *
+       * 不要把 ProductAudioTrack 放进任何一个 Scene 的 Sequence，
+       * 否则 sound-cues.ts 中的全局 frame 会发生偏移。
+       */}
+      <ProductAudioTrack />
     </AbsoluteFill>
   );
 };
