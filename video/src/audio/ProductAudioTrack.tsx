@@ -7,14 +7,14 @@ import {
   type SoundCue,
 } from "./sound-cues";
 
-type StudioAudioMode = "off" | "key" | "full";
+type StudioAudioMode = "off" | "key" | "";
 
 /**
- * off：Studio 完全静音，不挂载 Audio
- * key：Studio 只播放关键音效
- * full：Studio 播放全部音效，可能导致卡顿
+ * off：Studio 不挂载音频。
+ * key：Studio 只播放关键音效，推荐。
+ * full：Studio 播放全部音效，可能卡顿。
  */
-const STUDIO_AUDIO_MODE: StudioAudioMode = "key";
+const STUDIO_AUDIO_MODE: StudioAudioMode = "full";
 
 const STUDIO_CUE_IDS = new Set<string>([
   "scene-02-match-cut",
@@ -67,9 +67,9 @@ const getStudioSoundCues = (
       return cues;
 
     case "key":
-      return cues.filter((cue) =>
-        STUDIO_CUE_IDS.has(cue.id),
-      );
+      return cues.filter((cue) => {
+        return STUDIO_CUE_IDS.has(cue.id);
+      });
 
     default: {
       const exhaustiveCheck: never = mode;

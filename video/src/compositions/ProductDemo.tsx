@@ -126,12 +126,6 @@ export const ProductDemo = () => {
         <OutroScene />
       </Sequence>
 
-      {/*
-       * 音频只挂载一次，并使用完整视频的全局帧坐标。
-       *
-       * 不要把 ProductAudioTrack 放进任何一个 Scene 的 Sequence，
-       * 否则 sound-cues.ts 中的全局 frame 会发生偏移。
-       */}
       <ProductAudioTrack />
     </AbsoluteFill>
   );
