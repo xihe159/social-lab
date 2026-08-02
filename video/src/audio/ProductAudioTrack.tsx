@@ -1,115 +1,212 @@
 import {Audio} from "@remotion/media";
-import {useMemo} from "react";
-import {useRemotionEnvironment} from "remotion";
+import {Sequence, useRemotionEnvironment} from "remotion";
 
+import {timeline} from "../timeline/product-film";
 import {
-  productSoundCues,
-  type SoundCue,
-} from "./sound-cues";
+  resolveProductAudioSettings,
+  type ProductAudioSettingsInput,
+} from "./audio-settings";
+import {productSoundCues, type SoundCue} from "./sound-cues";
+import {resolveSoundSource} from "./sound-library";
 
-type StudioAudioMode = "off" | "key" | "";
+export type ProductAudioTrackProps = Readonly<{
+  settings?: ProductAudioSettingsInput;
+}>;
+
+type TimelineSceneKey = keyof typeof timeline;
+
+type AudioSceneTrackDefinition = Readonly<{
+  idPrefix: `scene-${string}`;
+  timelineKey: TimelineSceneKey;
+  label: string;
+}>;
 
 /**
- * off：Studio 不挂载音频。
- * key：Studio 只播放关键音效，推荐。
- * full：Studio 播放全部音效，可能卡顿。
+ * 音效按 Scene 建立稳定父级音轨。
+ *
+ * 之前每个 cue 都是根节点下的独立 Sequence，同时 Audio 默认被
+ * showInTimeline=false 隐藏。对于只有两个短 cue 的 Scene 02，Studio
+ * 时间轴上会看起来像整个 Scene 02 音轨消失。
+ *
+ * 现在 12 个 Scene 都有固定父级 Sequence；单条 Audio 是否展示仍由
+ * showInTimeline 控制，音频渲染结果不受时间轴 UI 影响。
  */
-const STUDIO_AUDIO_MODE: StudioAudioMode = "full";
+const AUDIO_SCENE_TRACKS = [
+  {
+    idPrefix: "scene-01",
+    timelineKey: "unsent",
+    label: "Scene 01 - Unsent Message",
+  },
+  {
+    idPrefix: "scene-02",
+    timelineKey: "landing",
+    label: "Scene 02 - Brand Landing",
+  },
+  {
+    idPrefix: "scene-03",
+    timelineKey: "picker",
+    label: "Scene 03 - Scenario Picker",
+  },
+  {
+    idPrefix: "scene-04",
+    timelineKey: "scenarioForm",
+    label: "Scene 04 - Scenario Form",
+  },
+  {
+    idPrefix: "scene-05",
+    timelineKey: "personSetup",
+    label: "Scene 05 - Person Setup",
+  },
+  {
+    idPrefix: "scene-06",
+    timelineKey: "persona",
+    label: "Scene 06 - Persona Reveal",
+  },
+  {
+    idPrefix: "scene-07",
+    timelineKey: "conversation",
+    label: "Scene 07 - Conversation",
+  },
+  {
+    idPrefix: "scene-08",
+    timelineKey: "mechanism",
+    label: "Scene 08 - Agent Mechanism",
+  },
+  {
+    idPrefix: "scene-09",
+    timelineKey: "dynamics",
+    label: "Scene 09 - Dynamics",
+  },
+  {
+    idPrefix: "scene-10",
+    timelineKey: "report",
+    label: "Scene 10 - Report Overview",
+  },
+  {
+    idPrefix: "scene-11",
+    timelineKey: "rewrite",
+    label: "Scene 11 - Rewrite and Retry",
+  },
+  {
+    idPrefix: "scene-12",
+    timelineKey: "outro",
+    label: "Scene 12 - Outro",
+  },
+] as const satisfies readonly AudioSceneTrackDefinition[];
 
-const STUDIO_CUE_IDS = new Set<string>([
-  "scene-02-match-cut",
-
-  "scene-03-start-button-click",
-  "scene-03-modal-open",
-  "scene-03-mentor-click",
-  "scene-03-mentor-selected",
-
-  "scene-04-goal-click",
-  "scene-04-urgency-click",
-  "scene-04-text-focus",
-  "scene-04-concern-click",
-
-  "scene-05-page-enter",
-  "scene-05-generate-click",
-  "scene-05-generated",
-
-  "scene-06-page-enter",
-  "scene-06-strategy-ready",
-
-  "scene-07-send-click",
-  "scene-07-target-response",
-
-  "scene-08-enter",
-  "scene-08-mechanism-complete",
-
-  "scene-09-enter",
-
-  "scene-10-enter",
-  "scene-10-score-complete",
-
-  "scene-11-enter",
-  "scene-11-retry-click",
-  "scene-11-match-cut",
-
-  "scene-12-enter",
-  "scene-12-brand-settle",
-]);
-
-const getStudioSoundCues = (
-  cues: readonly SoundCue[],
-  mode: StudioAudioMode,
-): readonly SoundCue[] => {
-  switch (mode) {
-    case "off":
-      return [];
-
-    case "full":
-      return cues;
-
-    case "key":
-      return cues.filter((cue) => {
-        return STUDIO_CUE_IDS.has(cue.id);
-      });
-
-    default: {
-      const exhaustiveCheck: never = mode;
-      return exhaustiveCheck;
-    }
-  }
+const clamp01 = (value: number): number => {
+  return Math.min(1, Math.max(0, value));
 };
 
-export const ProductAudioTrack = () => {
+const getEnvelope = (localFrame: number, cue: SoundCue): number => {
+  const fadeInFrames = Math.max(0, cue.fadeInFrames ?? 0);
+  const fadeOutFrames = Math.max(0, cue.fadeOutFrames ?? 0);
+
+  const fadeIn =
+    fadeInFrames === 0 ? 1 : clamp01(localFrame / fadeInFrames);
+
+  const remainingFrames = cue.durationInFrames - 1 - localFrame;
+  const fadeOut =
+    fadeOutFrames === 0
+      ? 1
+      : clamp01(remainingFrames / fadeOutFrames);
+
+  return Math.min(fadeIn, fadeOut);
+};
+
+const belongsToScene = (
+  cue: SoundCue,
+  scene: AudioSceneTrackDefinition,
+): boolean => {
+  return cue.id.startsWith(`${scene.idPrefix}-`);
+};
+
+const getSceneTrackDuration = (
+  sceneFrom: number,
+  sceneDuration: number,
+  cues: readonly SoundCue[],
+): number => {
+  const visualSceneEnd = sceneFrom + sceneDuration;
+  const audioSceneEnd = cues.reduce((latestEnd, cue) => {
+    return Math.max(latestEnd, cue.frame + cue.durationInFrames);
+  }, visualSceneEnd);
+
+  // 部分转场音效会自然延续到下一 Scene 的前几帧，因此父音轨允许保留尾音。
+  return audioSceneEnd - sceneFrom;
+};
+
+export const ProductAudioTrack = ({
+  settings: settingsInput,
+}: ProductAudioTrackProps) => {
   const {isStudio} = useRemotionEnvironment();
+  const settings = resolveProductAudioSettings(settingsInput);
 
-  const studioSoundCues = useMemo(() => {
-    return getStudioSoundCues(
-      productSoundCues,
-      STUDIO_AUDIO_MODE,
-    );
-  }, []);
-
-  const activeSoundCues = isStudio
-    ? studioSoundCues
-    : productSoundCues;
-
-  if (activeSoundCues.length === 0) {
+  if (!settings.enabled || (isStudio && settings.studioMode === "off")) {
     return null;
   }
 
+  const mutedCueIds = new Set(settings.mutedCueIds);
+  const activeCues = productSoundCues.filter((cue) => {
+    if (mutedCueIds.has(cue.id)) {
+      return false;
+    }
+
+    if (isStudio && settings.studioMode === "key") {
+      return cue.importance === "key";
+    }
+
+    return true;
+  });
+
   return (
     <>
-      {activeSoundCues.map((cue) => {
+      {AUDIO_SCENE_TRACKS.map((sceneTrack) => {
+        const sceneTiming = timeline[sceneTrack.timelineKey];
+        const sceneCues = activeCues.filter((cue) => {
+          return belongsToScene(cue, sceneTrack);
+        });
+        const trackDuration = getSceneTrackDuration(
+          sceneTiming.from,
+          sceneTiming.duration,
+          sceneCues,
+        );
+
         return (
-          <Audio
-            key={cue.id}
-            name={`SFX · ${cue.id}`}
-            src={cue.src}
-            from={cue.frame}
-            durationInFrames={cue.durationInFrames}
-            volume={() => cue.volume}
-            playbackRate={cue.playbackRate ?? 1}
-            showInTimeline={false}
-          />
+          <Sequence
+            key={sceneTrack.idPrefix}
+            from={sceneTiming.from}
+            durationInFrames={trackDuration}
+            premountFor={settings.premountFrames}
+            layout="none"
+            name={`Audio · ${sceneTrack.label}`}
+          >
+            {sceneCues.map((cue) => {
+              const localFrom = cue.frame - sceneTiming.from;
+              const peakVolume =
+                cue.volume *
+                settings.masterVolume *
+                settings.categoryVolumes[cue.category];
+
+              return (
+                <Audio
+                  key={cue.id}
+                  src={resolveSoundSource(
+                    cue.assetId,
+                    settings.assetOverrides,
+                  )}
+                  from={localFrom}
+                  durationInFrames={cue.durationInFrames}
+                  premountFor={settings.premountFrames}
+                  volume={(localFrame) => {
+                    return peakVolume * getEnvelope(localFrame, cue);
+                  }}
+                  playbackRate={cue.playbackRate ?? 1}
+                  showInTimeline={settings.showInTimeline}
+                  name={`SFX · ${cue.id}`}
+                />
+              );
+            })}
+          </Sequence>
         );
       })}
     </>

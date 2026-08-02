@@ -1,6 +1,13 @@
 import {AbsoluteFill, Sequence} from "remotion";
 
-import {ProductAudioTrack} from "../audio/ProductAudioTrack";
+import {
+  ProductAudioTrack,
+  type ProductAudioTrackProps,
+} from "../audio/ProductAudioTrack";
+import {
+  ProductBgmTrack,
+  type ProductBgmTrackProps,
+} from "../audio/ProductBgmTrack";
 import {AgentMechanismScene} from "../scenes/AgentMechanismScene";
 import {BrandLandingScene} from "../scenes/BrandLandingScene";
 import {ConversationScene} from "../scenes/ConversationScene";
@@ -17,7 +24,14 @@ import {timeline} from "../timeline/product-film";
 
 const SCENE_PREMOUNT_FRAMES = 12;
 
-export const ProductDemo = () => {
+export type ProductDemoProps = Readonly<{
+  audio?: ProductAudioTrackProps["settings"];
+  bgm?: ProductBgmTrackProps["settings"];
+}>;
+
+
+
+export const ProductDemo = ({audio, bgm}: ProductDemoProps) => {
   return (
     <AbsoluteFill>
       <Sequence
@@ -126,7 +140,8 @@ export const ProductDemo = () => {
         <OutroScene />
       </Sequence>
 
-      <ProductAudioTrack />
+      <ProductBgmTrack settings={bgm} />
+      <ProductAudioTrack settings={audio} />
     </AbsoluteFill>
   );
 };

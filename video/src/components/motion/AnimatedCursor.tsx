@@ -14,12 +14,22 @@ export type CursorClickRange = {
   end: number;
 };
 
+export type CursorHotspot = Readonly<{
+  x: number;
+  y: number;
+}>;
+
 export type AnimatedCursorProps = {
   points: readonly CursorPoint[];
   clicks?: readonly CursorClickRange[];
   visibleFrom?: number;
   visibleUntil?: number;
   size?: number;
+  /**
+   * 鼠标 SVG 中真正接触按钮的尖端坐标。
+   * 默认值与下方 path 的尖端 M7.3 4.8 完全一致。
+   */
+  hotspot?: CursorHotspot;
   style?: CSSProperties;
 };
 
@@ -27,6 +37,9 @@ const CLAMP = {
   extrapolateLeft: "clamp",
   extrapolateRight: "clamp",
 } as const;
+
+const DEFAULT_HOTSPOT: CursorHotspot = {x: 7.3, y: 4.8};
+const CLICK_RING_SIZE = 24;
 
 const getClickProgress = (
   frame: number,
@@ -54,38 +67,49 @@ const getClickProgress = (
   return result;
 };
 
+const assertValidPoints = (points: readonly CursorPoint[]) => {
+  if (points.length < 2) {
+    throw new Error("AnimatedCursor requires at least two cursor points.");
+  }
+
+  for (let index = 1; index < points.length; index += 1) {
+    if (points[index].frame <= points[index - 1].frame) {
+      throw new Error(
+        "AnimatedCursor point frames must be strictly increasing.",
+      );
+    }
+  }
+};
+
 export const AnimatedCursor = ({
   points,
   clicks = [],
   visibleFrom = 0,
   visibleUntil = Number.POSITIVE_INFINITY,
   size = 42,
+  hotspot = DEFAULT_HOTSPOT,
   style,
 }: AnimatedCursorProps) => {
   const frame = useCurrentFrame();
-
-  if (points.length < 2) {
-    throw new Error("AnimatedCursor requires at least two cursor points.");
-  }
+  assertValidPoints(points);
 
   const inputRange = points.map((point) => point.frame);
+  const movementOptions = {
+    ...CLAMP,
+    easing: Easing.bezier(0.16, 1, 0.3, 1),
+  } as const;
+
   const x = interpolate(
     frame,
     inputRange,
     points.map((point) => point.x),
-    {
-      ...CLAMP,
-      easing: Easing.bezier(0.16, 1, 0.3, 1),
-    },
+    movementOptions,
   );
   const y = interpolate(
     frame,
     inputRange,
     points.map((point) => point.y),
-    {
-      ...CLAMP,
-      easing: Easing.bezier(0.16, 1, 0.3, 1),
-    },
+    movementOptions,
   );
 
   const entranceOpacity = interpolate(
@@ -94,12 +118,14 @@ export const AnimatedCursor = ({
     [0, 1],
     CLAMP,
   );
-  const exitOpacity = interpolate(
-    frame,
-    [visibleUntil - 8, visibleUntil],
-    [1, 0],
-    CLAMP,
-  );
+  const exitOpacity = Number.isFinite(visibleUntil)
+    ? interpolate(
+        frame,
+        [Math.max(visibleFrom, visibleUntil - 8), visibleUntil],
+        [1, 0],
+        CLAMP,
+      )
+    : 1;
   const opacity = Math.min(entranceOpacity, exitOpacity);
   const clickProgress = getClickProgress(frame, clicks);
   const cursorScale = interpolate(clickProgress, [0, 1], [1, 0.86], CLAMP);
@@ -121,8 +147,8 @@ export const AnimatedCursor = ({
         width: size,
         height: size,
         opacity,
-        transform: `translate(-8px, -7px) scale(${cursorScale})`,
-        transformOrigin: "8px 7px",
+        transform: `translate(${-hotspot.x}px, ${-hotspot.y}px) scale(${cursorScale})`,
+        transformOrigin: `${hotspot.x}px ${hotspot.y}px`,
         pointerEvents: "none",
         willChange: "transform, opacity, left, top",
         ...style,
@@ -131,10 +157,10 @@ export const AnimatedCursor = ({
       <div
         style={{
           position: "absolute",
-          left: 5,
-          top: 5,
-          width: 24,
-          height: 24,
+          left: hotspot.x - CLICK_RING_SIZE / 2,
+          top: hotspot.y - CLICK_RING_SIZE / 2,
+          width: CLICK_RING_SIZE,
+          height: CLICK_RING_SIZE,
           borderRadius: "50%",
           border: `2px solid ${COLORS.brand}`,
           opacity: ringOpacity,

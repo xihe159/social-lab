@@ -1,64 +1,56 @@
 import {staticFile} from "remotion";
 
-export const SOUNDS = {
-  click: {
-    primary01: staticFile(
-      "audio/sfx/click/mouse-click.mp3",
-    ),
-    primary02: staticFile(
-      "audio/sfx/click/mouse-click-close.wav",
-    ),
-    secondary01: staticFile(
-      "audio/sfx/click/classic-click.wav",
-    ),
-  },
+/**
+ * 语义化音效资源表。
+ *
+ * 所有相对路径都以 video/public 为根目录。
+ * 后期只需替换这里的文件名，或通过 ProductAudioTrack 的
+ * settings.assetOverrides 在运行时覆盖，不需要改时间轴代码。
+ */
+export const SOUND_ASSET_FILES = {
+  "click.primary": "click/mouse-click.mp3",
+  "click.alternate": "click/mouse-click-close.wav",
+  "click.secondary": "click/classic-click.wav",
+  "click.soft": "click/soft-click.mp3",
+  "click.quick": "click/quick-click.mp3",
 
-  typing: {
-    key01: staticFile(
-      "audio/sfx/typing/slow-typing-on-a-keyboard.wav",
-    ),
-    key02: staticFile(
-      "audio/sfx/typing/typing-on-a-laptop-keyboard.wav",
-    ),
-    loop: staticFile(
-      "audio/sfx/typing/typing-sound.mp3",
-    ),
-  },
+  "typing.keySlow": "typing/slow-typing-on-a-keyboard.wav",
+  "typing.keyLaptop": "typing/typing-on-a-laptop-keyboard.wav",
+  "typing.loop": "typing/typing-sound.mp3",
 
-  // 使用复数名称，避免被 Remotion ESLint 误判为 CSS transition。
-  transitions: {
-    modalOpen: staticFile(
-      "audio/sfx/transition/washing-machine-open.wav",
-    ),
-    pageSoft: staticFile(
-      "audio/sfx/transition/flipcard.mp3",
-    ),
-    cardSlide: staticFile(
-      "audio/sfx/transition/card-sounds.mp3",
-    ),
-  },
+  "transition.modalOpen": "transition/washing-machine-open.wav",
+  "transition.pageSoft": "transition/flipcard.mp3",
+  "transition.cardSlide": "transition/card-sounds.mp3",
 
-  status: {
-    selected: staticFile(
-      "audio/sfx/status/menu-selection.mp3",
-    ),
-    completed: staticFile(
-      "audio/sfx/status/simple-notify-completed-process.mp3",
-    ),
-    reportReady: staticFile(
-      "audio/sfx/status/report-ready.wav",
-    ),
-    agentPulse: staticFile(
-      "audio/sfx/status/smooth-completed-notify-starting-alert.mp3",
-    ),
-  },
+  "status.selected": "status/menu-selection.mp3",
+  "status.completed": "status/simple-notify-completed-process.mp3",
+  "status.reportReady": "status/clicking-interface-select.mp3",
+  "status.agentPulse":
+    "status/smooth-completed-notify-starting-alert.mp3",
 
-  brand: {
-    logo: staticFile(
-      "audio/sfx/brand/elegant-logo-reveal.mp3",
-    ),
-  },
+  "brand.logo": "brand/elegant-logo-reveal.mp3",
 } as const;
+
+export type SoundAssetId = keyof typeof SOUND_ASSET_FILES;
+export type SoundAssetOverrides = Partial<Record<SoundAssetId, string>>;
+
+const ABSOLUTE_OR_REMOTE_SOURCE = /^(?:https?:|data:|blob:|\/)/i;
+
+/**
+ * 将 public 相对路径、站内绝对路径或远程 URL 统一转换成 Audio 可用的 src。
+ */
+export const resolveSoundSource = (
+  assetId: SoundAssetId,
+  overrides: SoundAssetOverrides = {},
+): string => {
+  const source = overrides[assetId] ?? SOUND_ASSET_FILES[assetId];
+
+  if (ABSOLUTE_OR_REMOTE_SOURCE.test(source)) {
+    return source;
+  }
+
+  return staticFile(source.replace(/^\.\//, ""));
+};
 
 export const selectDeterministicValue = <T>(
   values: readonly T[],
@@ -71,7 +63,5 @@ export const selectDeterministicValue = <T>(
   }
 
   const safeSeed = Math.abs(Math.trunc(seed));
-  const index = safeSeed % values.length;
-
-  return values[index];
+  return values[safeSeed % values.length];
 };
