@@ -44,13 +44,14 @@ export type ProductAudioSettingsInput = Readonly<
 
 export const DEFAULT_PRODUCT_AUDIO_SETTINGS: ProductAudioSettings = {
   enabled: true,
-  masterVolume: 1,
+  // 默认提升 20%，让移动端广告片中的点击、转场与状态提示更清晰。
+  masterVolume: 1.2,
   categoryVolumes: {
     click: 1,
-    typing: 0.82,
-    transition: 0.9,
-    status: 0.95,
-    brand: 0.9,
+    typing: 0.92,
+    transition: 1,
+    status: 1,
+    brand: 1,
   },
   studioMode: "full",
   // Remotion 的 Audio 默认会显示在时间轴中。这里保持 true，
@@ -62,12 +63,13 @@ export const DEFAULT_PRODUCT_AUDIO_SETTINGS: ProductAudioSettings = {
   assetOverrides: {},
 };
 
+// 允许小幅增益，但限制在 1.5 以内，避免用户配置造成明显削波。
 const clampVolume = (value: number): number => {
   if (!Number.isFinite(value)) {
     return 0;
   }
 
-  return Math.min(1, Math.max(0, value));
+  return Math.min(1.5, Math.max(0, value));
 };
 
 const clampFrameCount = (value: number): number => {
