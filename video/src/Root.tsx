@@ -1,24 +1,25 @@
-import {Composition} from "remotion";
-
+import { Composition } from "remotion";
 import {
   MOBILE_VIDEO,
   MobileProductDemo,
 } from "./compositions/MobileProductDemo";
-import {ProductDemo} from "./compositions/ProductDemo";
-import {VIDEO} from "./design/tokens";
-import {AgentMechanismScene} from "./scenes/AgentMechanismScene";
-import {BrandLandingScene} from "./scenes/BrandLandingScene";
-import {ConversationScene} from "./scenes/ConversationScene";
-import {DynamicsScene} from "./scenes/DynamicsScene";
-import {OutroScene} from "./scenes/OutroScene";
-import {PersonSetupScene} from "./scenes/PersonSetupScene";
-import {PersonaRevealScene} from "./scenes/PersonaRevealScene";
-import {ReportOverviewScene} from "./scenes/ReportOverviewScene";
-import {RewriteRetryScene} from "./scenes/RewriteRetryScene";
-import {ScenarioFormScene} from "./scenes/ScenarioFormScene";
-import {ScenarioPickerScene} from "./scenes/ScenarioPickerScene";
-import {SocialLabIntro} from "./scenes/SocialLabIntro";
-import {PRODUCT_FILM_DURATION, timeline} from "./timeline/product-film";
+import { ProductDemo } from "./compositions/ProductDemo";
+import { ProductLaunchFilm } from "./compositions/ProductLaunchFilm";
+import { LAUNCH_VIDEO } from "./design/launch-film-theme";
+import { VIDEO } from "./design/tokens";
+import { AgentMechanismScene } from "./scenes/AgentMechanismScene";
+import { BrandLandingScene } from "./scenes/BrandLandingScene";
+import { ConversationScene } from "./scenes/ConversationScene";
+import { DynamicsScene } from "./scenes/DynamicsScene";
+import { OutroScene } from "./scenes/OutroScene";
+import { PersonSetupScene } from "./scenes/PersonSetupScene";
+import { PersonaRevealScene } from "./scenes/PersonaRevealScene";
+import { ReportOverviewScene } from "./scenes/ReportOverviewScene";
+import { RewriteRetryScene } from "./scenes/RewriteRetryScene";
+import { ScenarioFormScene } from "./scenes/ScenarioFormScene";
+import { ScenarioPickerScene } from "./scenes/ScenarioPickerScene";
+import { SocialLabIntro } from "./scenes/SocialLabIntro";
+import { PRODUCT_FILM_DURATION, timeline } from "./timeline/product-film";
 
 export const RemotionRoot = () => {
   return (
@@ -119,14 +120,32 @@ export const RemotionRoot = () => {
         width={VIDEO.width}
         height={VIDEO.height}
       />
+      {/* 发布宣传片：真实产品场景 + 广告化叙事层。 */}
       <Composition
         id="SocialLabProductFilm"
-        component={ProductDemo}
+        component={ProductLaunchFilm}
+        durationInFrames={PRODUCT_FILM_DURATION}
+        fps={LAUNCH_VIDEO.fps}
+        width={LAUNCH_VIDEO.width}
+        height={LAUNCH_VIDEO.height}
+      />
+      <Composition
+        id="SocialLabProductLaunchFilm"
+        component={ProductLaunchFilm}
+        durationInFrames={PRODUCT_FILM_DURATION}
+        fps={LAUNCH_VIDEO.fps}
+        width={LAUNCH_VIDEO.width}
+        height={LAUNCH_VIDEO.height}
+      />
+      <Composition
+        id="SocialLabProductFilmHD"
+        component={ProductLaunchFilm}
         durationInFrames={PRODUCT_FILM_DURATION}
         fps={VIDEO.fps}
-        width={VIDEO.width}
-        height={VIDEO.height}
+        width={1920}
+        height={1080}
       />
+      {/* 保留纯产品操作版，方便对照和后续迭代。 */}
       <Composition
         id="SocialLabProductDemo"
         component={ProductDemo}

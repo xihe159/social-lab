@@ -29,8 +29,6 @@ export type ProductDemoProps = Readonly<{
   bgm?: ProductBgmTrackProps["settings"];
 }>;
 
-
-
 export const ProductDemo = ({audio, bgm}: ProductDemoProps) => {
   return (
     <AbsoluteFill>
