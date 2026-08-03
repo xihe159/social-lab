@@ -1,9 +1,5 @@
 import {Composition} from "remotion";
 
-import {
-  MOBILE_VIDEO,
-  MobileProductDemo,
-} from "./compositions/MobileProductDemo";
 import {ProductDemo} from "./compositions/ProductDemo";
 import {VIDEO} from "./design/tokens";
 import {AgentMechanismScene} from "./scenes/AgentMechanismScene";
@@ -119,6 +115,7 @@ export const RemotionRoot = () => {
         width={VIDEO.width}
         height={VIDEO.height}
       />
+
       <Composition
         id="SocialLabProductFilm"
         component={ProductDemo}
@@ -134,14 +131,6 @@ export const RemotionRoot = () => {
         fps={VIDEO.fps}
         width={VIDEO.width}
         height={VIDEO.height}
-      />
-      <Composition
-        id="SocialLabProductMobile"
-        component={MobileProductDemo}
-        durationInFrames={PRODUCT_FILM_DURATION}
-        fps={VIDEO.fps}
-        width={MOBILE_VIDEO.width}
-        height={MOBILE_VIDEO.height}
       />
     </>
   );
