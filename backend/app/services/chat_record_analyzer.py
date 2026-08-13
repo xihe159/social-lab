@@ -17,6 +17,7 @@ from app.schemas.chat_record import (
 from app.schemas.persona_v2 import (
     BehaviorPattern,
     BehaviorTrigger,
+    ChatEvidenceSummary,
     CommunicationStyle,
     ObservedResponse,
     PersonaModelV2,
@@ -415,7 +416,32 @@ class ChatRecordAnalyzer:
         result.evidence_summary.evidence_count = len(analysis.evidence)
         result.evidence_summary.chat_record_available = True
         result.evidence_summary.overall_confidence = analysis.confidence
+        result.chat_evidence_summary = [
+            ChatEvidenceSummary(
+                evidence_id=item.evidence_id,
+                summary=self._summarize_real_chat_evidence(item.content),
+                supports=item.supports[:8],
+                contexts=item.scope[:4],
+                confidence=item.confidence,
+            )
+            for item in analysis.evidence
+            if item.confidence >= 0.70
+        ][:6]
         return PersonaModelV2.model_validate(result.model_dump())
+
+    @staticmethod
+    def _summarize_real_chat_evidence(content: str) -> str:
+        """Keep a short target-person excerpt, not the full uploaded episode."""
+
+        target_lines = [
+            line.removeprefix("对方：").strip()
+            for line in content.splitlines()
+            if line.strip().startswith("对方：")
+        ]
+        excerpt = " / ".join(item for item in target_lines[:2] if item)
+        if not excerpt:
+            excerpt = "该片段包含可识别的目标人物回应。"
+        return f"真实聊天中观察到的目标人物回应片段：{excerpt}"[:360]
 
     @staticmethod
     def _speaker_aliases(target_role: str) -> dict[str, str]:

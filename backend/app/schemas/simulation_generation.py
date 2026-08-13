@@ -25,8 +25,11 @@ class ResponseGenerationInput(GenerationSchema):
     persona: PersonaModelV2
     current_state: SimulationState
     response_policy: ResponsePolicy
+    # Internal compatibility tracking; not part of the public Session contract.
     strategy_policy_id: str | None = None
     strategy_action: str | None = None
+    strategy_guidance_id: str | None = None
+    recommended_mode: str | None = None
     strategy_evidence_refs: list[str] = Field(default_factory=list)
     recent_turns: list[DecisionMessage] = Field(default_factory=list)
     user_message: str = Field(min_length=1)

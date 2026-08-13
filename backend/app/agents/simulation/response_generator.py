@@ -45,17 +45,8 @@ class ResponseGenerator:
         if not generated.response_text:
             generated.response_text = _default_response(
                 policy.action,
+                content_goals=policy.content_goals,
                 strategy_action=request.strategy_action,
-            )
-
-        generated.response_text = _enforce_strategy_semantics(
-            generated.response_text,
-            strategy_action=request.strategy_action,
-        )
-        if _has_style_adjustment(request, "两句以内"):
-            generated.response_text = _keep_sentence_limit(
-                generated.response_text,
-                limit=2,
             )
 
         max_length = {
@@ -63,6 +54,14 @@ class ResponseGenerator:
             "medium": 240,
             "long": 500,
         }[policy.reply_length]
+        if request.simulation_adjustments is not None:
+            max_length = max(
+                40,
+                round(
+                    max_length
+                    * request.simulation_adjustments.style.length_scale
+                ),
+            )
 
         if policy.action == "REPLY_BRIEF":
             max_length = min(max_length, 60)
@@ -79,15 +78,18 @@ class ResponseGenerator:
         return generated
 
 
-def _default_response(action: str, *, strategy_action: str | None = None) -> str:
-    if strategy_action == "refuse":
-        return "这件事我不能答应。"
-    if strategy_action == "accept":
-        return "可以。"
-    if strategy_action == "accept_with_condition":
+def _default_response(
+    action: str,
+    *,
+    content_goals: list[str] | None = None,
+    strategy_action: str | None = None,
+) -> str:
+    del strategy_action
+    goals = " ".join(content_goals or [])
+    if any(marker in goals for marker in ("拒绝", "不能答应", "不接受")):
+        return "这件事我目前不能答应。"
+    if any(marker in goals for marker in ("条件", "补充信息后", "满足要求后")):
         return "可以，但需要先把条件确认清楚。"
-    if strategy_action == "partial_accept":
-        return "我只能接受其中一部分。"
     return {
         "REPLY_BRIEF": "知道了。",
         "REPLY_COLD": "我知道了，之后再说。",
@@ -108,25 +110,12 @@ def build_fallback_response(
     if policy.action in {"DEFER_REPLY", "READ_NO_REPLY"}:
         text = ""
     else:
-        text = _default_response(policy.action, strategy_action=strategy_action)
+        text = _default_response(
+            policy.action,
+            content_goals=policy.content_goals,
+            strategy_action=strategy_action,
+        )
     return GeneratedResponse(response_text=text, response_action=policy.action)
-
-
-def _enforce_strategy_semantics(
-    value: str,
-    *,
-    strategy_action: str | None,
-) -> str:
-    if strategy_action != "refuse":
-        return value
-
-    refusal_markers = ("不能", "不行", "没法", "不同意", "不答应", "拒绝", "不可以")
-    acceptance_markers = ("可以", "没问题", "答应", "同意", "当然")
-    has_refusal = any(marker in value for marker in refusal_markers)
-    contradicts_refusal = any(marker in value for marker in acceptance_markers)
-    if contradicts_refusal and not has_refusal:
-        return "这件事我不能答应。"
-    return value
 
 
 def _keep_one_question(value: str) -> str:
@@ -136,29 +125,6 @@ def _keep_one_question(value: str) -> str:
     if len(question_positions) <= 1:
         return value
     return value[: question_positions[0] + 1].strip()
-
-
-def _has_style_adjustment(
-    request: ResponseGenerationInput,
-    marker: str,
-) -> bool:
-    profile = request.simulation_adjustments
-    return bool(
-        profile
-        and any(marker in adjustment for adjustment in profile.style_adjustments)
-    )
-
-
-def _keep_sentence_limit(value: str, *, limit: int) -> str:
-    sentence_ends = {"。", "！", "？", "!", "?"}
-    completed = 0
-    for index, char in enumerate(value):
-        if char not in sentence_ends:
-            continue
-        completed += 1
-        if completed >= limit:
-            return value[: index + 1].strip()
-    return value
 
 
 def _truncate(value: str, max_length: int) -> str:

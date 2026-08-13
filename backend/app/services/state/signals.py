@@ -18,7 +18,7 @@ from app.services.state.constants import (
     RESPONSIBILITY_WORDS,
     VAGUE_WORDS,
 )
-from app.services.state.utils import contains_any
+from app.services.state.utils import contains_affirmed_any, contains_any
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,37 +60,38 @@ class SignalDetector:
                 user_lower,
                 DYNAMICS_POLITE_WORDS,
             ),
-            concrete=contains_any(user_lower, CONCRETE_WORDS),
-            pressure=contains_any(user_lower, PRESSURE_WORDS),
+            concrete=contains_affirmed_any(user_lower, CONCRETE_WORDS),
+            pressure=contains_affirmed_any(user_lower, PRESSURE_WORDS),
             vague=(
-                contains_any(user_lower, VAGUE_WORDS)
+                contains_affirmed_any(user_lower, VAGUE_WORDS)
                 or len(user_text) < 8
             ),
-            responsibility=contains_any(
+            responsibility=contains_affirmed_any(
                 user_lower,
                 RESPONSIBILITY_WORDS,
             ),
-            apology=contains_any(user_lower, APOLOGY_WORDS),
+            apology=contains_affirmed_any(user_lower, APOLOGY_WORDS),
+            # These phrases intentionally contain negation ("不用马上" etc.).
             gives_space=contains_any(user_lower, GIVES_SPACE_WORDS),
-            explicit_acceptance=contains_any(
+            explicit_acceptance=contains_affirmed_any(
                 target_lower,
                 EXPLICIT_ACCEPTANCE_WORDS,
             ),
-            conditional_acceptance=contains_any(
+            conditional_acceptance=contains_affirmed_any(
                 target_lower,
                 CONDITIONAL_ACCEPTANCE_WORDS,
             ),
-            explicit_refusal=contains_any(
+            explicit_refusal=contains_affirmed_any(
                 target_lower,
                 EXPLICIT_REFUSAL_WORDS,
             ),
-            defensive_reply=contains_any(
+            defensive_reply=contains_affirmed_any(
                 target_lower,
                 DEFENSIVE_REPLY_WORDS,
             ),
             asks_for_detail=(
                 "?" in target_text
                 or "？" in target_text
-                or contains_any(target_lower, DETAIL_REQUEST_WORDS)
+                or contains_affirmed_any(target_lower, DETAIL_REQUEST_WORDS)
             ),
         )

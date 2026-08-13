@@ -16,9 +16,10 @@ The public API and frontend contract remain unchanged during Phase 0.
 ## Phase 0 version behavior
 
 - `SIMULATION_AGENT_VERSION=v1` selects the preserved V1 implementation.
-- `SIMULATION_AGENT_VERSION=v2` selects the V2 entry point.
-- V2 delegates to V1 during Phase 0, so response and state behavior remain
-  identical until the later PRD phases are implemented.
+- `SIMULATION_AGENT_VERSION=v2` remains a compatibility alias for the current
+  V2 implementation.
+- `SIMULATION_AGENT_VERSION=v2.1` explicitly selects the repaired V2.1 path.
+- V1 and V2.1 are independent implementations; V2.1 never mutates V1.
 - Missing or invalid values safely select V1.
 
 ## Rollback
@@ -39,12 +40,16 @@ request schema, response schema, or stored data migration is required.
 
 ## Phase 2 turn decision engine
 
-> 2026-07-17 integration update: TargetResponseStrategyAgent now owns the active
-> Response Policy. The original Turn Decision Engine remains only as a historical
-> regression reference and is no longer wired into SimulationAgentV2.
+> 2026-07-29 V2.1 correction: Strategy no longer owns the final action. The
+> active chain is TurnStateAnalyzer → Strategy Guidance → Simulation Decision
+> Engine → Response Generator.
 
-- One structured model call produces turn analysis, state delta, and response
-  policy; it does not generate final reply text.
+- TurnStateAnalyzer produces intent, observable behavior, persona triggers,
+  risks and bounded state deltas, but never chooses accept/refuse or tone.
+- Strategy produces one to three advisory response hypotheses with normalized
+  probabilities, evidence and a recommended direction.
+- Simulation Decision Engine combines Persona, Memory, updated relationship
+  state, history, current semantics and Guidance, and owns the final action.
 - Normal-turn deltas are clamped to +/-0.15. Only recognized severe events can
   use the +/-0.25 limit.
 - Relationship, emotion, and conversation state are updated without mutating the
@@ -54,15 +59,17 @@ request schema, response schema, or stored data migration is required.
 
 ## Phase 3 response generation and integration
 
-- V2 now runs StrategyAgent followed by Response Generator.
+- V2.1 runs TurnStateAnalyzer, advisory Strategy, Simulation Decision Engine,
+  then Response Generator.
 - The generator must preserve the selected action and applies response-length
   limits after structured output validation.
 - `/api/session/message` keeps its existing visible reply contract and adds an
   optional V2 state snapshot for transparent multi-turn continuity.
 - The frontend carries anonymous persona/session IDs and the V2 state without
   changing the chat UI.
-- StateAgent is skipped for V2 because the Strategy Policy adapter already owns
-  conservative state updates; V1 orchestration is unchanged.
+- StateAgent remains active for communication Dynamics and confirmed risk
+  supplements. In V2/V2.1 it does not overwrite Simulation's relationship state;
+  V1 orchestration is unchanged.
 
 ## Phase 4 response actions and no-reply behavior
 
@@ -116,9 +123,10 @@ request schema, response schema, or stored data migration is required.
   confidence, major relationship changes, high conflict, sensitive actions, or
   obvious reply-length, emoji, and formality mismatches.
 - Normal responses keep the standard Decision + Generation two-call path.
-- A failed evaluation or any critical score below 0.75 may retry language
-  generation once with concise consistency feedback. The response action and
-  state remain fixed, and no evaluation loop is allowed.
+- Ordinary low scores are recorded without regeneration. Only persona
+  violations, confirmed Memory contradictions, invented Persona traits,
+  action/text contradictions, or ungrounded Guidance deviation may trigger one
+  synchronous correction. No second evaluation loop is allowed.
 - Evaluator failure never blocks the initial reply. Session metadata and logs
   record trigger reasons, scores, issues, retry count, and failure status.
 
@@ -142,11 +150,22 @@ request schema, response schema, or stored data migration is required.
 - Local development uses `/`; production builds retain `/social-lab/` for GitHub
   Pages.
 
-## Strategy / Evaluation V2 ownership update
+## Strategy / Evaluation V2.1 ownership update
 
-- StrategyAgent is the only active Response Policy owner; TurnDecisionEngine is
-  retained only for historical regression coverage.
+- StrategyAgent owns advisory Guidance only. Simulation Decision Engine owns the
+  final Response Policy and may deviate when Persona or context evidence supports
+  the decision.
 - EvaluationAgent V2 is the only active semantic quality evaluator in the V2
-  main path; the legacy ConsistencyEvaluator is not imported or called there.
+  main path. Its target is character fidelity, not politeness or persuasion.
 - Feedback is bounded to one Strategy replan or one Simulation regeneration.
   Only the final candidate reaches the Turn Store and MemoryAgent.
+- Session learning uses bounded numeric style preferences only. It cannot alter
+  Persona, relationship state, warmth, final action, or helping intent.
+
+## V2.1 release gate
+
+- Keep `SIMULATION_AGENT_VERSION=v1` as the default and rollback path.
+- Run paired human review on all 36 fixed cases before changing the default.
+- Required gates: V2.1 win rate at least 55%, Persona consistency not below V1,
+  hard-error rate at most 3%, and ordinary-turn Evaluation non-intervention at
+  least 85%.

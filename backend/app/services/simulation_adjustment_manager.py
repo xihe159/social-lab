@@ -5,17 +5,20 @@ from dataclasses import dataclass, field
 from threading import RLock
 
 from app.schemas.evaluation import FailureAttribution
-from app.schemas.simulation_adjustment import SimulationAdjustmentProfile
+from app.schemas.simulation_adjustment import (
+    SimulationAdjustmentProfile,
+    SimulationStyleAdjustment,
+)
 
 
 _REQUIRED_CONSECUTIVE_TURNS = 3
 _PROFILE_LIFETIME_TURNS = 3
 
-_ADJUSTMENTS: dict[str, tuple[str, str]] = {
-    "reply_too_long": ("style", "下一轮回复长度控制在两句以内。"),
-    "over_comforting": ("style", "减少解释和主动安慰。"),
-    "punctuation_mismatch": ("style", "遵循 Persona 证据中的标点习惯。"),
-    "over_cooperative": ("strategy", "不要默认帮助用户推进目标或扩大承诺。"),
+_ADJUSTMENT_CATEGORIES = {
+    "reply_too_long",
+    "over_comforting",
+    "punctuation_mismatch",
+    "over_cooperative",
 }
 
 
@@ -214,23 +217,31 @@ class SimulationAdjustmentManager:
         if not activated_categories:
             return False
 
-        style_adjustments: list[str] = []
-        strategy_adjustments: list[str] = []
         source_ids: list[str] = []
         for category in activated_categories:
-            owner, adjustment = _ADJUSTMENTS[category]
-            if owner == "style":
-                style_adjustments.append(adjustment)
-            else:
-                strategy_adjustments.append(adjustment)
             for source_id in state.streaks[category].evaluation_ids:
                 if source_id not in source_ids:
                     source_ids.append(source_id)
 
+        style = SimulationStyleAdjustment(
+            length_scale=(
+                0.90 if "reply_too_long" in activated_categories else 1.0
+            ),
+            explanation_ratio_delta=(
+                -0.10 if "over_comforting" in activated_categories else 0.0
+            ),
+            punctuation_match_strength=(
+                0.90
+                if "punctuation_mismatch" in activated_categories
+                else 0.5
+            ),
+            prevent_unplanned_commitment=(
+                "over_cooperative" in activated_categories
+            ),
+        )
         state.active_profile = SimulationAdjustmentProfile(
             session_id=session_id,
-            style_adjustments=style_adjustments,
-            strategy_adjustments=strategy_adjustments,
+            style=style,
             source_evaluation_ids=source_ids,
             expires_after_turns=_PROFILE_LIFETIME_TURNS,
         )
@@ -260,7 +271,7 @@ class SimulationAdjustmentManager:
 
 def _normalize_signal(value: str) -> str | None:
     signal = str(value).strip().lower().replace("-", "_").replace(" ", "_")
-    if signal in _ADJUSTMENTS:
+    if signal in _ADJUSTMENT_CATEGORIES:
         return signal
 
     compact = signal.replace("_", "")

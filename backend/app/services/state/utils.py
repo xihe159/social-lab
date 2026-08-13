@@ -12,6 +12,51 @@ def contains_any(text: str, keywords: Iterable[str]) -> bool:
     return any(keyword.lower() in normalized for keyword in keywords)
 
 
+def contains_affirmed_any(text: str, keywords: Iterable[str]) -> bool:
+    """Match keywords while ignoring a nearby explicit negation."""
+
+    normalized = text.lower()
+    negators = (
+        "不是",
+        "并不是",
+        "并非",
+        "没有",
+        "并没有",
+        "不用",
+        "无需",
+        "不必",
+        "不算",
+        "未",
+        "无",
+        "not ",
+        "no ",
+        "never ",
+        "isn't ",
+        "wasn't ",
+        "don't ",
+        "didn't ",
+    )
+    for keyword in keywords:
+        token = keyword.lower()
+        start = 0
+        while True:
+            index = normalized.find(token, start)
+            if index < 0:
+                break
+            prefix = normalized[max(0, index - 16):index].rstrip()
+            for boundary in ("。", "！", "？", ".", "!", "?", "；", ";", "，", ",", "但是", "但", "不过", "却"):
+                if boundary in prefix:
+                    prefix = prefix.rsplit(boundary, 1)[-1]
+            negated = any(
+                negator.rstrip() in prefix[-12:]
+                for negator in negators
+            )
+            if not negated:
+                return True
+            start = index + max(1, len(token))
+    return False
+
+
 def append_unique(values: list[str], item: str) -> None:
     if item not in values:
         values.append(item)

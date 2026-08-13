@@ -264,6 +264,70 @@ def _format_messages(messages: list[dict[str, Any]] | None) -> str:
     return "\n".join(lines) if lines else "暂无历史对话。"
 
 
+def _build_observed_persona_profile(persona_v2: Any) -> dict[str, Any] | None:
+    """Expose only real-chat observations, never Strategy decisions."""
+
+    if not isinstance(persona_v2, dict):
+        return None
+    evidence_summary = persona_v2.get("evidence_summary") or {}
+    if not evidence_summary.get("chat_record_available"):
+        return None
+
+    high_confidence_patterns = [
+        {
+            "pattern_id": item.get("pattern_id"),
+            "trigger": item.get("trigger"),
+            "observed_response": item.get("observed_response"),
+            "inferred_tendency": item.get("inferred_tendency"),
+            "confidence": item.get("confidence"),
+            "evidence_ids": item.get("evidence_ids", []),
+        }
+        for item in persona_v2.get("behavior_patterns", [])
+        if isinstance(item, dict)
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.65
+    ][:5]
+    chat_evidence = [
+        item
+        for item in persona_v2.get("chat_evidence_summary", [])
+        if isinstance(item, dict)
+        and float(item.get("confidence", 0.0) or 0.0) >= 0.70
+    ][:6]
+    return {
+        "source": "REAL_CHAT_OBSERVATION",
+        "communication_style": persona_v2.get("communication_style", {}),
+        "high_confidence_behavior_patterns": high_confidence_patterns,
+        "chat_evidence_summary": chat_evidence,
+        "evidence_summary": evidence_summary,
+        "usage_boundary": (
+            "这些是观察特征，不是动作命令；不得据此强制接受、拒绝、冷淡或温暖。"
+        ),
+    }
+
+
+def _build_safe_session_memory(memory: Any) -> dict[str, Any] | None:
+    """Remove generated target quotes and keep only session continuity facts."""
+
+    if not isinstance(memory, dict):
+        return None
+    return {
+        "scope": "SESSION_CONTINUITY_ONLY",
+        "conversation_summary": memory.get("conversation_summary", ""),
+        "user_strategy_pattern": memory.get("user_strategy_pattern", [])[:6],
+        "temporary_target_concerns": memory.get("target_sensitive_points", [])[:4],
+        "resolved_points": memory.get("resolved_points", [])[:6],
+        "unresolved_points": memory.get("unresolved_points", [])[:6],
+        "important_events": memory.get("important_events", [])[:8],
+        "active_focus_issues": memory.get("active_focus_issues", [])[:5],
+        "key_info_repetition_risks": memory.get(
+            "key_info_repetition_risks", []
+        )[:5],
+        "next_suggested_focus": memory.get("next_suggested_focus", ""),
+        "usage_boundary": (
+            "Memory 只维护本次会话连续性，不是人物画像证据，不能修改稳定风格或行为模式。"
+        ),
+    }
+
+
 def build_persona_user_prompt(payload: dict[str, Any]) -> str:
     """
     根据 PersonaCreateRequest.model_dump() 构造 PersonaAgent 用户提示词。
@@ -326,11 +390,16 @@ def build_simulation_user_prompt(payload: dict[str, Any]) -> str:
     - goal / user_goal
     - outcome
     - persona
+    - persona_v2（只读取真实聊天观察特征）
     - messages
     - user_message
     - memory
     """
     goal = payload.get("goal", payload.get("user_goal", ""))
+    observed_persona_profile = _build_observed_persona_profile(
+        payload.get("persona_v2")
+    )
+    safe_memory = _build_safe_session_memory(payload.get("memory"))
 
     return f"""
 请进入目标人物视角，生成本轮回复。
@@ -347,14 +416,24 @@ def build_simulation_user_prompt(payload: dict[str, Any]) -> str:
 【目标人物画像 persona】
 {_to_pretty_json(payload.get("persona", {}))}
 
-【当前会话短期记忆 memory】
-{_to_pretty_json(payload.get("memory", {}))}
+【上传聊天记录形成的人物观察特征】
+{_to_pretty_json(observed_persona_profile) if observed_persona_profile else "未提供可用的真实聊天观察特征。"}
 
 【历史对话 messages】
 {_format_messages(payload.get("messages"))}
 
+【当前会话短期记忆 memory】
+{_to_pretty_json(safe_memory) if safe_memory else "暂无会话短期记忆。"}
+
 【用户最新发言 user_message】
 {_safe_text(payload.get("user_message"))}
+
+【人物证据优先级】
+1. 上传聊天记录形成的观察特征与稳定 persona 优先级最高；两者是人物模拟依据。
+2. 当前关系状态、真实历史对话和用户最新发言用于判断这个人此刻如何反应。
+3. Session Memory 优先级最低，只用于避免忘记本次会话事件，不能修改人物稳定风格。
+4. AI 以前模拟出的目标人物回复不是现实人物证据，不能反向学习成固定性格或习惯。
+5. Strategy 与 Evaluation 的标签、推荐方向和评分不得参与本轮回复决策。
 
 {NON_QUESTION_REPLY_EXAMPLES}
 
@@ -699,19 +778,20 @@ redacted_fields:
 # StrategyAgent Prompts
 # =========================
 
-STRATEGY_PROMPT_VERSION = "strategy-v2.2-phase5-session-adaptation"
+STRATEGY_PROMPT_VERSION = "strategy-v2.5-v21-guidance"
 
 STRATEGY_SYSTEM_PROMPT = """
 你是 Social Lab 的 TargetResponseStrategyAgent，代码类名暂时保留 StrategyAgent。
 
-你的唯一任务是站在目标人物角度，根据 Persona、双方关系、会话记忆、最近消息和用户最新发言，为目标人物制定本轮 Response Policy。
+你的唯一任务是站在目标人物角度，根据 Persona、双方关系、Turn State Analysis、
+会话记忆、最近消息和用户最新发言，为 SimulationAgent 提供本轮 Response Guidance。
 
-你负责决定：
+你负责提供：
 1. 目标人物如何理解用户本轮表达；
-2. 目标人物准备采取什么行为；
-3. 这次反应希望达到什么目的；
-4. 回复必须包含和必须避免的内容；
-5. 目标人物的立场以及语气范围。
+2. 1 到 3 个可能反应方向及概率；
+3. 当前最值得 Simulation 参考的推荐方向；
+4. 这次反应可能达到的沟通目标；
+5. 回复内容约束和可接受语气范围。
 
 你不负责：
 1. 给用户推荐下一句话；
@@ -719,16 +799,20 @@ STRATEGY_SYSTEM_PROMPT = """
 3. 生成候选话术或多个语气版本；
 4. 评价用户沟通水平；
 5. 生成目标人物最终回复；
-6. 为了帮助用户而让目标人物过度配合。
+6. 替 SimulationAgent 决定最终接受、拒绝、冷暖或回复长度；
+7. 为了帮助用户而让目标人物过度配合。
 
-动作和语气必须分开。action 表示行为，tone_profile 表示表达方式。
-required_content 和 forbidden_content 是给 SimulationAgent 的内部约束，不是用户建议。
+possible_response_modes 是假设空间，不是最终动作命令。
+recommended_mode 是建议，不是唯一正确答案。
+tone_range 是允许范围，不是固定语气。
+required_content 和 forbidden_content 是内部约束，不是用户建议。
 
 证据规则：
 1. persona_evidence_refs 只能引用输入中存在的 Persona 字段、pattern_id 或 evidence id；
 2. memory_evidence_refs 只能引用输入中存在的 memory_id 或可识别会话事件；
 3. 没有证据时不要编造引用，应降低 confidence 并写入 uncertainty_notes；
-4. no_reply 和 end_conversation 只在证据充分、关系状态支持且置信度高时使用。
+4. no_reply 和 end_conversation 可以作为候选；只有 Persona 与当前语义、
+   或更强的 Memory/重复边界证据支持时才推荐。
 
 evaluation_correction 仅在 EvaluationAgent 要求重规划时出现：
 1. keep 表示仍应保留的策略原则；
@@ -738,11 +822,11 @@ evaluation_correction 仅在 EvaluationAgent 要求重规划时出现：
 
 simulation_adjustments 是 EvaluationAgent 对连续重复偏差压缩出的会话级临时约束：
 1. 只约束本轮策略和表达，不是 Persona 事实，也不能写入人物证据引用；
-2. strategy_adjustments 应限制过度配合、默认推进用户目标或扩大承诺；
-3. style_adjustments 只影响长度、解释、安慰和标点等表达选择；
+2. adjustment 只能作为轻量生成偏好，不得改变人物反应方向；
+3. style adjustment 只影响长度比例、解释密度和标点匹配；
 4. 临时约束与 Persona 真实证据冲突时，以 Persona 和聊天证据为准。
 
-输出必须严格符合 TargetResponsePolicy JSON Schema。
+输出必须严格符合 TargetResponseGuidance JSON Schema。
 不要输出 Markdown、最终回复、用户建议或额外解释。
 """.strip()
 
@@ -750,7 +834,7 @@ simulation_adjustments 是 EvaluationAgent 对连续重复偏差压缩出的会�
 def build_strategy_user_prompt(request: Any) -> str:
     payload = request.model_dump(mode="json")
     return f"""
-请为目标人物制定本轮内部 Response Policy。
+请为目标人物制定本轮内部 Response Guidance。
 
 任务追踪信息：
 - trace_id: {payload.get("trace_id")}
@@ -765,6 +849,9 @@ def build_strategy_user_prompt(request: Any) -> str:
 
 当前关系状态：
 {json.dumps(payload.get("relationship_state"), ensure_ascii=False)}
+
+本轮 Turn State Analysis（不包含回复动作）：
+{json.dumps(payload.get("turn_state_analysis"), ensure_ascii=False)}
 
 当前 Session Memory：
 {json.dumps(payload.get("session_memory"), ensure_ascii=False)}
@@ -781,7 +868,7 @@ def build_strategy_user_prompt(request: Any) -> str:
 会话内短期修正约束：
 {json.dumps(payload.get("simulation_adjustments"), ensure_ascii=False)}
 
-只输出 TargetResponsePolicy。不要生成目标人物最终说出口的话。
+只输出 TargetResponseGuidance。不要生成目标人物最终说出口的话。
 """.strip()
 
 
@@ -793,7 +880,7 @@ EVALUATION_SYSTEM_PROMPT = """
 你是 Social Lab 的 EvaluationAgent V2，是目标人物模拟质量的独立评测器。
 
 唯一成功标准：SimulationAgent 是否还原了目标人物在当前情境下最合理、最一致的反应。
-你不评估用户是否说服了对方，也不评估训练价值。
+你评估“像不像这个人”，不评估回复是否更礼貌、更温暖、更安全或更容易说服对方。
 
 职责边界：
 1. 不扮演目标人物，不生成或改写目标人物最终回复。
@@ -805,7 +892,8 @@ EVALUATION_SYSTEM_PROMPT = """
 1. persona_fidelity（20%）：是否符合目标人物稳定特征。
 2. dyadic_consistency（15%）：这个人物是否会对当前用户这样反应。
 3. state_continuity（15%）：是否延续关系、情绪与冲突状态。
-4. strategy_adherence（15%）：Simulation 是否准确执行 Response Policy。
+4. strategy_adherence（15%）：Simulation 是否合理使用 Response Guidance。
+   Guidance 不是命令；有 Persona、状态、Memory 或当前语义依据的偏离不得扣分。
 5. reaction_plausibility（15%）：对用户当前表达作出该反应是否合理、成比例。
 6. style_fidelity（10%）：长度、措辞、标点、称呼和表达习惯是否符合证据。
 7. evidence_grounding（10%）：关键反应是否有 Persona、Memory 或聊天证据支持。
@@ -817,10 +905,20 @@ EVALUATION_SYSTEM_PROMPT = """
   "INVENTED_PERSONA_TRAIT:" 开头记录。
 - context 明显不足时返回 context_gap 和 insufficient_evidence，不强行给高分或低分。
 
+只有以下 hard_errors 可以要求重生成：
+- persona_violation：明显违反稳定 Persona。
+- memory_contradiction：与已确认会话 Memory 直接冲突。
+- invented_persona_trait：编造输入中不存在的人物特征。
+- action_text_contradiction：最终动作与回复文本直接矛盾。
+- ungrounded_guidance_deviation：完全偏离 Guidance 且没有人物或上下文证据。
+
+回复略短、略长、不够温柔、解释较少、得分低于 75 等普通问题只能记录，
+不得放入 hard_errors，也不得要求重生成。
+
 失败归因：
-- strategy_error：Policy 本身违背 Persona、关系状态或证据。
-- simulation_execution_error：Policy 合理，但具体回复没有执行好。
-- mixed：Policy 与执行都存在实质问题。
+- strategy_error：Guidance 或人物决策明显违背 Persona、关系状态或证据。
+- simulation_execution_error：最终 Policy 合理，但具体回复出现硬矛盾。
+- mixed：两类硬错误同时存在。
 - context_gap：输入不足以可靠判断。
 - none：没有需要内部修正的问题。
 
@@ -830,7 +928,7 @@ EVALUATION_SYSTEM_PROMPT = """
 - mixed 可以同时填写两者。
 - none/context_gap 不填写 correction。
 
-critical_issues 只记录会阻止接受本轮输出的严重问题。
+critical_issues 只记录可观察问题；只有 hard_errors 会阻止接受本轮输出。
 evaluator_notes 只记录开发调试信息。
 session_learning_signals 只记录可在当前会话复用的模拟偏差，不得包含用户建议。
 该字段只能使用以下受控标识，无法确定或不适用时返回空数组：
@@ -854,8 +952,8 @@ def build_evaluation_user_prompt(request: Any) -> str:
 - 返回 SimulationEvaluationResponse 的全部字段。
 - 每个 EvaluationScoreItem 必须包含 score、reason、evidence。
 - simulation_success_score 先按七维权重估算；后端会重新计算并应用硬性规则。
-- persona_fidelity < 60 时不得 ACCEPT。
-- strategy_adherence < 55 时至少 REVISE_SIMULATION。
+- 低分本身不触发重生成；只有 hard_errors 中的硬错误可以触发一次修正。
+- Guidance 是建议；有 Persona、Memory、状态或当前语义证据的偏离是合法人物决策。
 - 发现凭空创造人物特征时总分不得高于 59。
 - 不要输出任何面向用户的建议或候选话术。
 """

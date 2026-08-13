@@ -114,6 +114,13 @@ export type PersonaModelV2 = {
     chat_record_available: boolean;
     overall_confidence: number;
   };
+  chat_evidence_summary: Array<{
+    evidence_id: string;
+    summary: string;
+    supports: string[];
+    contexts: string[];
+    confidence: number;
+  }>;
   version: "2.0";
 };
 

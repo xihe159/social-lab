@@ -34,6 +34,14 @@ class MemoryEvidence(BaseModel):
     turn_index: int = Field(ge=1, description="证据来自第几轮")
     role: Literal["user", "target", "system"] = Field(description="证据来源角色")
     quote: str = Field(description="相关原话或简短证据")
+    source_type: Literal[
+        "USER_INPUT",
+        "SIMULATED_TARGET_REPLY",
+        "SYSTEM_EVENT",
+    ] = Field(
+        default="USER_INPUT",
+        description="区分真实用户输入与 AI 生成的目标人物回复",
+    )
 
 
 class MemoryItem(BaseModel):

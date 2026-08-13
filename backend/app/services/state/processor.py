@@ -64,6 +64,7 @@ class StateResultProcessor:
             request=request,
             signals=signals,
         )
+        self._filter_unconfirmed_risk_flags(result, signals=signals)
 
         self.normalizer.normalize_after_guardrails(result)
 
@@ -82,3 +83,31 @@ class StateResultProcessor:
 
         self.normalizer.normalize_lists(result)
         return result
+
+    @staticmethod
+    def _filter_unconfirmed_risk_flags(
+        result: StateEvaluationResponse,
+        *,
+        signals,
+    ) -> None:
+        """Prevent negated keyword guesses from becoming Session Memory facts."""
+
+        filtered: list[str] = []
+        for flag in result.risk_flags:
+            normalized = flag.lower()
+            pressure_claim = any(
+                marker in normalized
+                for marker in ("施压", "催促", "命令", "pressure", "threat")
+            )
+            refusal_claim = any(
+                marker in normalized
+                for marker in ("明确拒绝", "停止推进", "refusal")
+            )
+            if pressure_claim and not (
+                signals.pressure or signals.defensive_reply
+            ):
+                continue
+            if refusal_claim and not signals.explicit_refusal:
+                continue
+            filtered.append(flag)
+        result.risk_flags = filtered

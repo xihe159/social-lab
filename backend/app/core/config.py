@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # ------------------------------------------------------------------
 
     app_name: str = "Social Lab Agent API"
-    app_version: str = "0.2.0"
+    app_version: str = "0.3.0"
     app_description: str = "Social Lab 后端 Agent 稳定服务层 API"
 
     app_env: Literal[
@@ -115,10 +115,12 @@ class Settings(BaseSettings):
     # Agent 功能开关
     # ------------------------------------------------------------------
 
-    simulation_agent_version: Literal["v1", "v2"] = "v1"
+    # V3 使用原始 V1 人物模拟内核，Strategy 只提供旁路建议，
+    # Evaluation 只做后台审计。V1 仅保留为快速回退版本。
+    simulation_agent_version: Literal["v1", "v3"] = "v3"
 
     # 暂时保留为字符串，兼容项目现有执行模式
-    evaluation_execution_mode: str = "development_sync"
+    evaluation_execution_mode: str = "auto"
 
     # ------------------------------------------------------------------
     # 字段规范化
@@ -130,6 +132,23 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return value.strip().lower()
         return value
+
+    @field_validator("simulation_agent_version", mode="before")
+    @classmethod
+    def normalize_simulation_agent_version(cls, value: object) -> object:
+        """Retire V2 safely without breaking an existing deployment setting.
+
+        Render may still contain ``v2`` or ``v2.1`` from an earlier release.
+        Mapping those values to V3 lets the new release boot successfully; the
+        environment should still be changed to ``v3`` after deployment.
+        """
+
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip().lower()
+        if normalized in {"v2", "v2.1", "v3.0"}:
+            return "v3"
+        return normalized
 
     @field_validator("log_level", mode="before")
     @classmethod

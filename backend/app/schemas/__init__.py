@@ -19,6 +19,7 @@ from app.schemas.persona_v2 import (
     DyadicProfile,
     BehaviorPattern,
     EvidenceSummary,
+    ChatEvidenceSummary,
     PersonaModelV2,
 )
 
@@ -157,6 +158,7 @@ __all__ = [
     "DyadicProfile",
     "BehaviorPattern",
     "EvidenceSummary",
+    "ChatEvidenceSummary",
     "PersonaModelV2",
 
     "NormalizedChatMessage",

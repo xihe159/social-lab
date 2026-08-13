@@ -19,8 +19,8 @@ STRATEGY_TO_SIMULATION_ACTION = {
     ResponseAction.ASK_CLARIFICATION: "ASK_CLARIFICATION",
     ResponseAction.ACCEPT: "REPLY_NORMAL",
     ResponseAction.ACCEPT_WITH_CONDITION: "REPLY_NORMAL",
-    ResponseAction.PARTIAL_ACCEPT: "REPLY_COLD",
-    ResponseAction.REFUSE: "REPLY_COLD",
+    ResponseAction.PARTIAL_ACCEPT: "REPLY_NORMAL",
+    ResponseAction.REFUSE: "REPLY_NORMAL",
     ResponseAction.CHALLENGE: "CONFRONT",
     ResponseAction.SET_BOUNDARY: "SET_BOUNDARY",
     ResponseAction.DEFER: "DEFER_REPLY",
@@ -56,7 +56,7 @@ POSITIVE_TONE_MARKERS = (
 
 
 def adapt_strategy_policy(policy: TargetResponsePolicy) -> ResponsePolicy:
-    """Translate the single Strategy-owned policy into the V2 renderer contract."""
+    """Deprecated compatibility conversion; not used by the V2.1 main path."""
 
     action = STRATEGY_TO_SIMULATION_ACTION[policy.action]
     tone = (
@@ -72,8 +72,8 @@ def adapt_strategy_policy(policy: TargetResponsePolicy) -> ResponsePolicy:
         tone=tone,
         reply_length=(
             "short"
-            if policy.tone_profile.length in {"very_short", "short"}
-            else "medium"
+            if policy.tone_profile.length == "very_short"
+            else policy.tone_profile.length
         ),
         must_avoid=_unique(policy.forbidden_content, limit=6),
     )

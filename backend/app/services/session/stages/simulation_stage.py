@@ -39,7 +39,7 @@ class SimulationStage:
             has_memory=request.memory is not None,
         )
 
-        if self.version == "v2":
+        if self.version == "v3":
             response = await self.agent.run(
                 request,
                 defer_background=context.defer_background,
