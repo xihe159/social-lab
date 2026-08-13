@@ -5,6 +5,7 @@ from hashlib import sha256
 
 from app.agents.prompts import PERSONA_SYSTEM_PROMPT, build_persona_user_prompt
 from app.llm.client import generate_structured
+from app.prompts.persona import PERSONA_PROMPT
 from app.schemas.persona import (
     PersonaCreateRequest,
     PersonaCreateResponse,
@@ -43,6 +44,7 @@ class PersonaAgent:
             system_prompt=PERSONA_SYSTEM_PROMPT,
             user_prompt=build_persona_user_prompt(payload),
             output_model=PersonaDraftResponse,
+            temperature=PERSONA_PROMPT.temperature,
         )
         result = PersonaCreateResponse(**draft.model_dump())
 

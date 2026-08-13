@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.agents.prompts import SIMULATION_SYSTEM_PROMPT, build_simulation_user_prompt
 from app.llm.client import generate_structured
+from app.prompts.session import SIMULATION_LEGACY_PROMPT
 from app.schemas.common import RelationshipState
 from app.schemas.session import (
     ChatMessage,
@@ -40,7 +41,7 @@ class SimulationAgentV1:
             system_prompt=SIMULATION_SYSTEM_PROMPT,
             user_prompt=build_simulation_user_prompt(payload),
             output_model=SimulationReply,
-            temperature=0.55,
+            temperature=SIMULATION_LEGACY_PROMPT.temperature,
         )
 
         return self.post_process(simulation=simulation, request=request)

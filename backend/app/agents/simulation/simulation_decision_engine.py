@@ -6,6 +6,7 @@ from app.agents.simulation.prompts import (
     build_simulation_decision_prompt,
 )
 from app.llm.client import generate_structured
+from app.prompts.simulation import SIMULATION_DECISION_PROMPT
 from app.schemas.simulation_guidance import (
     SimulationDecisionOutput,
     SimulationDecisionRequest,
@@ -28,7 +29,7 @@ class SimulationDecisionEngine:
             system_prompt=SIMULATION_DECISION_SYSTEM_PROMPT,
             user_prompt=build_simulation_decision_prompt(request),
             output_model=SimulationDecisionOutput,
-            temperature=0.3,
+            temperature=SIMULATION_DECISION_PROMPT.temperature,
         )
         return self.post_process(result=result, request=request)
 

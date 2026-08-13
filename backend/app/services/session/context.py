@@ -1,7 +1,3 @@
-# social-lab/backend/app/services/session/context.py
-# 保存一轮请求在各 Stage 之间共享的数据
-# 2026/07/28
-
 from __future__ import annotations
 
 import time
@@ -9,12 +5,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from uuid import uuid4
 
+from app.core.agent_failure import AgentFailure
 from app.schemas.safety import SafetyCheckResponse
-from app.schemas.session import (
-    SessionMessageRequest,
-    SessionMessageResponse,
-    StateDelta,
-)
+from app.schemas.session import SessionMessageRequest, SessionMessageResponse, StateDelta
 
 
 @dataclass(slots=True)
@@ -33,6 +26,14 @@ class SessionExecutionContext:
     state_delta: StateDelta | None = None
     risk_flags: list[str] = field(default_factory=list)
     blocked: bool = False
+    failures: list[AgentFailure] = field(default_factory=list)
+
+    @property
+    def degraded(self) -> bool:
+        return bool(self.failures)
+
+    def record_failure(self, failure: AgentFailure) -> None:
+        self.failures.append(failure)
 
     def require_safety_result(self) -> SafetyCheckResponse:
         if self.safety_result is None:

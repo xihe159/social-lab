@@ -3,27 +3,32 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from typing import Any
 
-from app.agents.analysis_agent import AnalysisAgent
+from app.agents.failure_policies import (
+    REPORT_ANALYSIS_DEGRADED,
+    REPORT_PREDICTION_DEGRADED,
+    REPORT_REWRITE_DEGRADED,
+)
+from app.agents.fallbacks import (
+    fallback_analysis,
+    fallback_prediction,
+    fallback_rewrite,
+)
+from app.agents.policy_agents import PolicyAnalysisAgent
 from app.agents.prediction_agent import PredictionAgent
 from app.agents.rewrite_agent import RewriteAgent
+from app.core.agent_failure import AgentFailure, run_agent_call
 from app.schemas.analysis import ConversationProcessAnalysis
 from app.schemas.prediction import PredictionResult
 from app.schemas.report import ReportRequest, ReportResponse
 from app.schemas.rewrite import RewriteResult
 
-
 logger = logging.getLogger(__name__)
 
 
 class ReportAssembler:
-    """
-    确定性组装报告，保持三个 Agent 的职责边界。
-
-    - PredictionAgent：成功评分、结果和影响因素；
-    - AnalysisAgent：逐句观察、状态归因和评价；
-    - RewriteAgent：全部改进、改写和下一步。
-    """
+    """Deterministic report assembly; Agent ownership remains unchanged."""
 
     def run(
         self,
@@ -46,7 +51,6 @@ class ReportAssembler:
             main_influence_factors=prediction.main_influence_factors,
             prediction_trace=prediction.calculation_trace,
             calibration_version=prediction.calibration_version,
-
             conversation_analysis=analysis,
             strengths=analysis.strengths,
             problems=analysis.problems,
@@ -54,7 +58,6 @@ class ReportAssembler:
                 analysis=analysis,
                 prediction=prediction,
             ),
-
             suggested_rewrite=rewrite.suggested_rewrite,
             sentence_rewrites=rewrite.sentence_rewrites,
             rewrite_variants=rewrite.variants,
@@ -69,17 +72,11 @@ class ReportAssembler:
         prediction: PredictionResult,
     ) -> list[str]:
         risks = list(analysis.key_risks)
-
         for factor in prediction.main_influence_factors:
-            if (
-                factor.direction == "negative"
-                and factor.importance >= 4
-            ):
+            if factor.direction == "negative" and factor.importance >= 4:
                 risks.append(
-                    f"{factor.factor_name}明显拉低模拟成功评分："
-                    f"{factor.explanation}"
+                    f"{factor.factor_name}明显拉低模拟成功评分：{factor.explanation}"
                 )
-
         cleaned: list[str] = []
         for risk in risks:
             item = risk.strip()
@@ -89,48 +86,64 @@ class ReportAssembler:
 
 
 class CoachAgent:
-    """
-    报告编排入口。
+    """Resilient report pipeline.
 
-    执行顺序：
-    1. PredictionAgent；
-    2. AnalysisAgent；
-    3. RewriteAgent；
-    4. ReportAssembler。
+    Prediction / Analysis / Rewrite are all DEGRADED stages. A provider outage no
+    longer destroys the entire report; deterministic fallbacks preserve schema and
+    make the degraded status visible in structured logs.
     """
 
-    def __init__(self) -> None:
-        self.prediction_agent = PredictionAgent()
-        self.analysis_agent = AnalysisAgent()
-        self.rewrite_agent = RewriteAgent()
-        self.report_assembler = ReportAssembler()
-
-    async def run(
+    def __init__(
         self,
-        request: ReportRequest,
-    ) -> ReportResponse:
+        *,
+        prediction_agent: PredictionAgent | None = None,
+        analysis_agent: Any | None = None,
+        rewrite_agent: RewriteAgent | None = None,
+        report_assembler: ReportAssembler | None = None,
+    ) -> None:
+        self.prediction_agent = prediction_agent or PredictionAgent()
+        self.analysis_agent = analysis_agent or PolicyAnalysisAgent()
+        self.rewrite_agent = rewrite_agent or RewriteAgent()
+        self.report_assembler = report_assembler or ReportAssembler()
+
+    async def run(self, request: ReportRequest) -> ReportResponse:
         started = time.perf_counter()
+        failures: list[AgentFailure] = []
 
-        parallel_phase = time.perf_counter()
-        prediction, analysis = await asyncio.gather(
-            self.prediction_agent.run(request),
-            self.analysis_agent.run(request=request),
+        prediction_call = run_agent_call(
+            agent="PredictionAgent",
+            policy=REPORT_PREDICTION_DEGRADED,
+            call=lambda: self.prediction_agent.run(request),
+            fallback=lambda: fallback_prediction(self.prediction_agent, request),
+            on_failure=failures.append,
         )
-        logger.info(
-            "PredictionAgent and AnalysisAgent finished in %.2fs",
-            time.perf_counter() - parallel_phase,
+        analysis_call = run_agent_call(
+            agent="AnalysisAgent",
+            policy=REPORT_ANALYSIS_DEGRADED,
+            call=lambda: self.analysis_agent.run(request=request),
+            fallback=lambda: fallback_analysis(self.analysis_agent, request),
+            on_failure=failures.append,
         )
 
-        phase = time.perf_counter()
-        rewrite = await self.rewrite_agent.run(
-            request=request,
-            prediction=prediction,
-            analysis=analysis,
+        prediction_outcome, analysis_outcome = await asyncio.gather(
+            prediction_call,
+            analysis_call,
         )
-        logger.info(
-            "RewriteAgent finished in %.2fs",
-            time.perf_counter() - phase,
+        prediction = prediction_outcome.require_value()
+        analysis = analysis_outcome.require_value()
+
+        rewrite_outcome = await run_agent_call(
+            agent="RewriteAgent",
+            policy=REPORT_REWRITE_DEGRADED,
+            call=lambda: self.rewrite_agent.run(
+                request=request,
+                prediction=prediction,
+                analysis=analysis,
+            ),
+            fallback=lambda: fallback_rewrite(self.rewrite_agent, request),
+            on_failure=failures.append,
         )
+        rewrite = rewrite_outcome.require_value()
 
         report = self.report_assembler.run(
             request=request,
@@ -138,9 +151,13 @@ class CoachAgent:
             analysis=analysis,
             rewrite=rewrite,
         )
-
         logger.info(
-            "CoachAgent report finished in %.2fs",
-            time.perf_counter() - started,
+            "coach_report_finished",
+            extra={
+                "duration_ms": round((time.perf_counter() - started) * 1000),
+                "status": "degraded" if failures else "success",
+                "degraded_agents": [item.agent for item in failures],
+                "failure_kinds": [item.kind.value for item in failures],
+            },
         )
         return report

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from app.agents.prompts import STATE_SYSTEM_PROMPT, build_state_user_prompt
+from app.prompts.session import STATE_PROMPT, build_state_user_prompt
 from app.llm.client import generate_structured
 from app.schemas.dynamics import (
     ConversationDynamics,
@@ -49,9 +49,10 @@ class StateAgent:
         payload["current_dynamics"] = baseline.model_dump()
 
         result = await generate_structured(
-            system_prompt=STATE_SYSTEM_PROMPT,
-            user_prompt=self._build_prompt(payload),
+            system_prompt=STATE_PROMPT.system_prompt,
+            user_prompt=build_state_user_prompt(payload),
             output_model=StateEvaluationResponse,
+            temperature=STATE_PROMPT.temperature,
         )
 
         return self.processor.process(
@@ -72,42 +73,6 @@ class StateAgent:
             result=result,
             request=request,
         )
-
-    def _build_prompt(self, payload: dict) -> str:
-        base_prompt = build_state_user_prompt(payload)
-        return f"""
-{base_prompt}
-
-【对话动态指标补充要求】
-你还必须输出 dynamics_update，且严格符合 ConversationDynamicsUpdate。
-
-current_dynamics 是本轮之前的动态状态。
-dynamics_delta 是本轮变化量，不是最终值。
-updated_dynamics 应与 current_dynamics + dynamics_delta 基本一致。
-
-八项指标定义：
-- atmosphere_score：安全、开放、可继续沟通的程度；越高越好。
-- pace_score：节奏健康度；过快和停滞都会降低。
-- pressure_level：对方被催促、被迫表态的压力；越高风险越大。
-- clarity_score：用户表达的背景、请求、时间和方案是否清晰。
-- responsiveness_score：用户是否真正回应了目标人物上一轮顾虑。
-- progress_score：本轮是否更接近沟通目标。
-- repairability_score：发生分歧后是否仍有修复和继续沟通空间。
-- boundary_score：是否尊重双方边界、选择权和拒绝权。
-
-变化要求：
-- 普通一轮通常在 -3 到 +3；
-- 明确接受、明确拒绝、明显施压、真诚道歉并提出补救方案时才可更大；
-- pressure_level 为风险指标，上升通常是负面；
-- pace_score 表示节奏是否合适，不表示推进速度；
-- 不要因为礼貌词就大幅增加分数；
-- 目标人物明确拒绝时，progress_score 不应上升；
-- 用户明确给予退出空间时，boundary_score 不应下降；
-- 用户命令、催促或威胁时，pressure_level 不应下降。
-
-control_suggestions 只输出 1 到 3 条简短的内部控制提示，
-不要写完整改写话术，不要代替 AnalysisAgent 或 RewriteAgent。
-""".strip()
 
     # ------------------------------------------------------------------
     # 以下方法是兼容层。新代码应直接测试或调用 app.services.state。

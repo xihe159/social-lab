@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from app.llm.client import generate_structured
+from app.prompts.report import REWRITE_PROMPT, build_rewrite_user_prompt
 from app.schemas.analysis import ConversationProcessAnalysis
 from app.schemas.prediction import PredictionResult
 from app.schemas.report import ReportRequest
@@ -12,34 +13,6 @@ from app.schemas.rewrite import (
     RewriteVariants,
     SentenceRewrite,
 )
-
-
-REWRITE_SYSTEM_PROMPT = """
-你是 Social Lab 的 RewriteAgent。
-
-AnalysisAgent 已经完成逐句观察和评价，但没有给出任何改进意见。
-你的职责是单独完成所有改进相关内容：
-
-1. 对低效、高风险或阻碍目标的用户句子提供逐句改写；
-2. 生成一段综合最推荐话术；
-3. 生成最小修改版、温和版、坚定边界版；
-4. 给出下一步沟通行动；
-5. 列出下一轮应避免的表达。
-
-要求：
-- sentence_rewrites 只能引用 AnalysisAgent 中真实存在的用户句子；
-- original_text 必须原样复制；
-- 每个逐句改写要说明改写原因和预期影响；
-- 不要修改目标人物的回复；
-- 不要操控、威胁、欺骗、道德绑架或持续施压；
-- 如果目标人物已经明确拒绝或终止沟通，不要继续强推；
-- 如果压力较高，优先减少催促和立即表态要求；
-- 如果清晰度较低，补足必要背景、责任和具体安排；
-- 推荐表达要自然、可复制，并保留对方选择空间。
-
-输出必须严格符合 RewriteResult JSON Schema，不要输出 Markdown。
-""".strip()
-
 
 class RewriteAgent:
     """
@@ -54,14 +27,14 @@ class RewriteAgent:
         analysis: ConversationProcessAnalysis,
     ) -> RewriteResult:
         result = await generate_structured(
-            system_prompt=REWRITE_SYSTEM_PROMPT,
-            user_prompt=self._build_prompt(
+            system_prompt=REWRITE_PROMPT.system_prompt,
+            user_prompt=build_rewrite_user_prompt(
                 request=request,
                 prediction=prediction,
                 analysis=analysis,
             ),
             output_model=RewriteResult,
-            temperature=0.25,
+            temperature=REWRITE_PROMPT.temperature,
         )
         return self.post_process(
             result=result,
@@ -158,77 +131,6 @@ class RewriteAgent:
             max_items=6,
         )
         return result
-
-    def _build_prompt(
-        self,
-        *,
-        request: ReportRequest,
-        prediction: PredictionResult,
-        analysis: ConversationProcessAnalysis,
-    ) -> str:
-        rewrite_candidates = [
-            {
-                "turn_index": sentence.turn_index,
-                "sentence_index": sentence.sentence_index,
-                "sentence_text": sentence.sentence_text,
-                "evaluation_label": sentence.evaluation_label,
-                "evaluation_score": sentence.evaluation_score,
-                "goal_effect": sentence.goal_effect,
-                "target_likely_feeling": (
-                    sentence.target_likely_feeling
-                ),
-                "evaluation_reason": sentence.evaluation_reason,
-            }
-            for turn in analysis.turns
-            for sentence in turn.sentences
-            if (
-                sentence.evaluation_label
-                in {"neutral", "risky", "damaging"}
-                or sentence.goal_effect == "obstructs"
-                or sentence.evaluation_score < 65
-            )
-        ]
-
-        return f"""
-请输出 RewriteResult。
-
-【场景】
-{request.scenario}
-
-【用户目标】
-{request.goal}
-
-【期望结果】
-{request.outcome or "未提供"}
-
-【PredictionAgent 结果】
-{self._pretty(prediction.model_dump())}
-
-【AnalysisAgent 整体分析】
-{self._pretty({
-    "overall_assessment": analysis.overall_assessment,
-    "problems": analysis.problems,
-    "key_risks": analysis.key_risks,
-    "primary_bottleneck": analysis.primary_bottleneck,
-    "evaluation_scores": analysis.evaluation_scores.model_dump(),
-    "state_trajectory_summary": analysis.state_trajectory_summary,
-})}
-
-【可逐句改写的候选句】
-{self._pretty(rewrite_candidates)}
-
-【完整逐句分析】
-{self._pretty([
-    turn.model_dump()
-    for turn in analysis.turns
-])}
-
-请注意：
-- sentence_rewrites 只处理确有改进价值的句子；
-- 不必改写已经 strong 或 clearly effective 的句子；
-- 所有下一步和改进意见都在本输出中完成；
-- suggested_rewrite 应形成一段自然连贯的完整表达。
-""".strip()
 
     @staticmethod
     def _default_rewrite(request: ReportRequest) -> str:

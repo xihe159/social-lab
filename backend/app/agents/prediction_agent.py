@@ -4,6 +4,7 @@ import json
 from typing import Any
 
 from app.llm.client import generate_structured
+from app.prompts.report import PREDICTION_PROMPT, build_prediction_user_prompt
 from app.schemas.dynamics import ConversationDynamics
 from app.schemas.prediction import (
     PredictionContext,
@@ -13,34 +14,6 @@ from app.schemas.prediction import (
 from app.schemas.report import ReportRequest
 from app.schemas.session import ChatMessage
 from app.services.prediction_calculator import PredictionCalculator
-
-
-PREDICTION_SYSTEM_PROMPT = """
-你是 Social Lab 的 PredictionAgent。
-
-你的职责不是直接猜一个成功率，而是完成“有限语义评估”：
-1. 判断目标人物当前更接近接受、条件接受、犹豫、拒绝、不回应或未知；
-2. 找出当前结构化指标尚未完全覆盖的语义因素；
-3. 给出 -8 到 +8 的 semantic_adjustment；
-4. 提供严格绑定原话的证据；
-5. 解释最可能出现的模拟结果。
-
-禁止事项：
-- 不要直接输出 success_probability；
-- 不要输出下一步建议、改写话术或 improvement_action；
-- 不要把模拟结果写成现实必然；
-- 不要仅因为出现礼貌词就给出大幅正向修正；
-- 不要忽视目标人物已经表现出的拒绝、压力、防御或边界信号。
-
-semantic_adjustment 规则：
-- 普通补充语义通常在 -3 到 +3；
-- 只有非常明确且尚未被 Dynamics 指标覆盖的语义证据，才可达到 ±4 到 ±8；
-- 当前 Dynamics、关系状态和趋势已经进入确定性计算，不要重复大幅计分；
-- evidence_strength 表示证据充分程度，不表示成功概率。
-
-输出必须严格符合 SemanticPredictionAssessment JSON Schema，不要输出 Markdown。
-""".strip()
-
 
 class PredictionAgent:
     """
@@ -53,10 +26,10 @@ class PredictionAgent:
     async def run(self, request: ReportRequest) -> PredictionResult:
         context = self.build_context(request)
         semantic = await generate_structured(
-            system_prompt=PREDICTION_SYSTEM_PROMPT,
-            user_prompt=self._build_prompt(request, context),
+            system_prompt=PREDICTION_PROMPT.system_prompt,
+            user_prompt=build_prediction_user_prompt(request=request, context=context),
             output_model=SemanticPredictionAssessment,
-            temperature=0.15,
+            temperature=PREDICTION_PROMPT.temperature,
         )
         semantic = self.post_process_semantic(semantic, context)
         return self.calculator.calculate(context=context, semantic=semantic)
@@ -172,67 +145,6 @@ class PredictionAgent:
             )
 
         return semantic
-
-    def _build_prompt(
-        self,
-        request: ReportRequest,
-        context: PredictionContext,
-    ) -> str:
-        messages = "\n".join(
-            f"{index}. {message.role}: {message.content}"
-            for index, message in enumerate(request.messages, start=1)
-        ) or "暂无对话。"
-
-        dynamics = (
-            json.dumps(
-                context.current_dynamics.model_dump(),
-                ensure_ascii=False,
-                indent=2,
-            )
-            if context.current_dynamics is not None
-            else "未提供"
-        )
-        trend = (
-            json.dumps(
-                [item.model_dump() for item in context.dynamics_history[-5:]],
-                ensure_ascii=False,
-                indent=2,
-            )
-            if context.dynamics_history
-            else "未提供"
-        )
-
-        return f"""
-请输出 SemanticPredictionAssessment。
-
-【场景】
-{request.scenario}
-
-【沟通目标】
-{request.goal}
-
-【期望结果】
-{request.outcome or "未提供"}
-
-【目标人物画像】
-{json.dumps(request.persona.model_dump(), ensure_ascii=False, indent=2)}
-
-【完整模拟对话】
-{messages}
-
-【当前对话动态】
-{dynamics}
-
-【最近 Dynamics 快照】
-{trend}
-
-请重点判断：
-- 目标人物的最新回应属于接受、条件接受、犹豫、拒绝、不回应还是未知；
-- 哪些语义信号没有被当前 Dynamics 分数完整表达；
-- 语义修正只允许 -8 到 +8；
-- 所有 semantic_factors 必须引用真实对话原话；
-- 不要输出建议或改写。
-""".strip()
 
     @staticmethod
     def _snapshot_to_dynamics(snapshot: Any) -> ConversationDynamics:

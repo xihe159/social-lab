@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.llm.client import generate_structured
+from app.prompts.memory import MEMORY_EXTRACTOR_PROMPT, build_memory_extractor_user_prompt
 from app.schemas.memory import (
     MemoryEvidence,
     MemoryItem,
@@ -60,43 +61,6 @@ class MemoryExtractionResult(BaseModel):
     repetition_risks: list[str] = Field(description="关键信息重复或遗漏风险")
     next_focus: str = Field(description="下一轮最应该关注的重点")
     memory_reason: str = Field(description="本轮记忆更新理由")
-
-
-MEMORY_EXTRACTOR_SYSTEM_PROMPT = """
-你是 Social Lab 的 MemoryExtractor。
-你的任务不是写报告，也不是给用户建议，而是从一轮模拟对话中提取“会话短期记忆候选项”。
-
-你只记录当前 session 内对后续模拟、策略和报告有用的信息。
-
-必须重点识别以下四类内容：
-1. 用户对话模式：
-   例如表达是否模糊、是否急于推进、是否重复解释、是否缺少具体方案、
-   是否能承认责任、是否能降低对方成本、是否给对方选择空间。
-
-2. 目标人物敏感点：
-   例如目标人物是否在意时间成本、责任边界、尊重感、具体计划、
-   是否被催促、是否需要更多证据、是否担心用户只是口头承诺。
-
-3. 对话聚焦问题：
-   例如当前对话真正卡住的问题是什么，下一轮最应该补充什么。
-
-4. 关键信息重复风险：
-   例如用户是否重复解释同一件事但没有回应对方顾虑，
-   是否多次遗漏关键事实，是否反复要求对方表态。
-
-记忆原则：
-- 不保存手机号、住址、身份证号、账号、精确地址等敏感隐私。
-- 不把模拟推断说成现实事实。
-- 目标人物本轮回复是 AI 模拟输出，不是真实聊天记录或人物证据。
-- 不得根据 AI 模拟回复新增或修改人物的稳定性格、固定风格、长期偏好、
-  回复长短习惯、冷暖倾向或行为模式。
-- AI 模拟回复只能用于记录“本次会话发生了什么”、当前尚未解决的问题、
-  临时边界或已经明确表达的条件，不得升级为稳定 Persona 结论。
-- 每个候选记忆必须有 evidence_quote。
-- 不要输出 Markdown。
-- 输出必须严格符合 MemoryExtractionResult JSON Schema。
-""".strip()
-
 
 # =========================================================
 # 2. 通用工具函数
@@ -194,61 +158,6 @@ def _looks_like_stable_persona_claim(value: str) -> bool:
     return any(marker in lowered for marker in _STABLE_PERSONA_CLAIM_MARKERS)
 
 
-def _build_extractor_prompt(request: MemoryUpdateRequest) -> str:
-    current_memory = (
-        request.current_memory.model_dump(mode="json")
-        if request.current_memory
-        else None
-    )
-
-    return f"""
-请根据以下本轮模拟对话，提取短期会话记忆候选项。
-
-【场景】
-{request.scenario}
-
-【用户沟通目标】
-{request.goal}
-
-【用户期待结果】
-{request.outcome or "未提供"}
-
-【目标人物画像】
-{request.persona}
-
-【上一轮 memory】
-{current_memory or "暂无"}
-
-【用户本轮发言】
-{request.user_message}
-
-【目标人物本轮回复】
-{request.target_reply}
-（来源：AI 模拟生成，只能作为本次会话事件，不能作为真实人物画像证据）
-
-【本轮关系状态变化 state_delta】
-{request.state_delta}
-
-【本轮风险标记 risk_flags】
-{request.risk_flags}
-
-请输出：
-1. 本轮摘要；
-2. 3 到 8 条候选记忆；
-3. 已解决问题；
-4. 未解决问题；
-5. 关键信息重复风险；
-6. 下一轮重点；
-7. 本轮更新理由。
-
-特别注意：
-- 候选记忆必须覆盖用户对话模式、目标人物敏感点、对话聚焦问题、关键信息重复风险中的重要项；
-- 不要保存真实敏感隐私；
-- 每条候选记忆必须有 evidence_quote。
-- 不得从目标人物模拟回复中提取稳定人物风格或长期敏感点。
-""".strip()
-
-
 # =========================================================
 # 3. MemoryExtractor
 # =========================================================
@@ -262,10 +171,10 @@ class MemoryExtractor:
 
     async def run(self, request: MemoryUpdateRequest) -> MemoryExtractionResult:
         result = await generate_structured(
-            system_prompt=MEMORY_EXTRACTOR_SYSTEM_PROMPT,
-            user_prompt=_build_extractor_prompt(request),
+            system_prompt=MEMORY_EXTRACTOR_PROMPT.system_prompt,
+            user_prompt=build_memory_extractor_user_prompt(request),
             output_model=MemoryExtractionResult,
-            temperature=0.2,
+            temperature=MEMORY_EXTRACTOR_PROMPT.temperature,
         )
         return self.post_process(result, request)
 

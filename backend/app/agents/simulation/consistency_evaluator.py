@@ -7,6 +7,7 @@ from app.agents.simulation.prompts import (
     build_consistency_evaluation_prompt,
 )
 from app.llm.client import generate_structured
+from app.prompts.simulation import CONSISTENCY_PROMPT
 from app.schemas.consistency_evaluation import (
     ConsistencyEvaluationInput,
     ConsistencyEvaluationOutput,
@@ -83,7 +84,7 @@ class ConsistencyEvaluator:
             system_prompt=CONSISTENCY_EVALUATOR_SYSTEM_PROMPT,
             user_prompt=build_consistency_evaluation_prompt(request),
             output_model=ConsistencyEvaluationOutput,
-            temperature=0.1,
+            temperature=CONSISTENCY_PROMPT.temperature,
         )
         return self.post_process(result)
 
