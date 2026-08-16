@@ -1,36 +1,42 @@
-# social-lab/backend/app/api/persona.py
-# 2026/07/04
-
 from fastapi import APIRouter, HTTPException
 
+from app.agents.failure_policies import DIRECT_AGENT_REQUIRED, SAFETY_LLM_ENRICHMENT_DEGRADED
 from app.agents.persona_agent import PersonaAgent
-from app.agents.safety_agent import SafetyAgent
-
-from app.llm.client import LLMClientError
-
+from app.agents.policy_agents import PolicySafetyAgent
+from app.api.error_handling import to_agent_http_exception
+from app.core.agent_failure import AgentExecutionError, run_agent_call
 from app.schemas.persona import PersonaCreateRequest, PersonaCreateResponse
 from app.schemas.safety import SafetyCheckRequest
 
 router = APIRouter(prefix="/api/persona", tags=["persona"])
-
-safety_agent = SafetyAgent()
+safety_agent = PolicySafetyAgent()
 persona_agent = PersonaAgent()
+
 
 @router.post("/create", response_model=PersonaCreateResponse)
 async def create_persona(request: PersonaCreateRequest):
+    safety_request = SafetyCheckRequest(
+        context="persona_create",
+        scenario=request.scenario,
+        goal=request.goal,
+        outcome=request.outcome,
+        role=request.role,
+        relation=request.relation,
+        habit=request.habit,
+        chatLog=request.chatLog,
+    )
     try:
-        safety_result = await safety_agent.run(
-            SafetyCheckRequest(
-                context="persona_create",
-                scenario=request.scenario,
-                goal=request.goal,
-                outcome=request.outcome,
-                role=request.role,
-                relation=request.relation,
-                habit=request.habit,
-                chatLog=request.chatLog,
+        rule_result = safety_agent.rule_check(safety_request)
+        if rule_result.risk_level == "high" or rule_result.action == "block":
+            safety_result = rule_result
+        else:
+            safety_outcome = await run_agent_call(
+                agent="SafetyAgent.LLMEnrichment",
+                policy=SAFETY_LLM_ENRICHMENT_DEGRADED,
+                call=lambda: safety_agent.enrich(safety_request, rule_result=rule_result),
+                fallback=lambda: rule_result,
             )
-        )
+            safety_result = safety_outcome.require_value()
 
         if (
             not safety_result.allowed
@@ -45,19 +51,13 @@ async def create_persona(request: PersonaCreateRequest):
                 },
             )
 
-        return await persona_agent.run(request)
-
+        outcome = await run_agent_call(
+            agent="PersonaAgent",
+            policy=DIRECT_AGENT_REQUIRED,
+            call=lambda: persona_agent.run(request),
+        )
+        return outcome.require_value()
     except HTTPException:
         raise
-
-    except LLMClientError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"PersonaAgent 调用 LLM 失败：{exc}",
-        ) from exc
-
-    except Exception as exc:
-        raise HTTPException(
-            status_code=500,
-            detail=f"PersonaAgent 处理失败：{exc}",
-        ) from exc
+    except AgentExecutionError as exc:
+        raise to_agent_http_exception(exc) from exc

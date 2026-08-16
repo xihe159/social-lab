@@ -5,6 +5,7 @@ from app.agents.simulation.prompts import (
     build_turn_decision_prompt,
 )
 from app.llm.client import generate_structured
+from app.prompts.simulation import TURN_DECISION_PROMPT
 from app.schemas.simulation_decision import (
     SimulationStateDelta,
     TurnDecisionInput,
@@ -41,7 +42,7 @@ class TurnDecisionEngine:
             system_prompt=TURN_DECISION_SYSTEM_PROMPT,
             user_prompt=build_turn_decision_prompt(request),
             output_model=TurnDecisionOutput,
-            temperature=0.25,
+            temperature=TURN_DECISION_PROMPT.temperature,
         )
         return self.post_process(decision=decision, current_state=request.current_state)
 

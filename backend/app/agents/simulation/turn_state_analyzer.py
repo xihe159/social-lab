@@ -7,6 +7,7 @@ from app.agents.simulation.prompts import (
     build_turn_state_analysis_prompt,
 )
 from app.llm.client import generate_structured
+from app.prompts.simulation import TURN_STATE_PROMPT
 from app.schemas.simulation_decision import SimulationStateDelta
 from app.schemas.turn_state import (
     TurnStateAnalysis,
@@ -38,7 +39,7 @@ class TurnStateAnalyzer:
             system_prompt=TURN_STATE_ANALYZER_SYSTEM_PROMPT,
             user_prompt=build_turn_state_analysis_prompt(request),
             output_model=TurnStateAnalysis,
-            temperature=0.2,
+            temperature=TURN_STATE_PROMPT.temperature,
         )
         return self.post_process(analysis=analysis, request=request)
 

@@ -6,6 +6,7 @@ from app.agents.simulation.prompts import (
     build_response_generation_prompt,
 )
 from app.llm.client import generate_structured
+from app.prompts.simulation import RESPONSE_GENERATION_PROMPT
 from app.schemas.simulation_generation import (
     GeneratedResponse,
     ResponseGenerationInput,
@@ -23,7 +24,7 @@ class ResponseGenerator:
             system_prompt=RESPONSE_GENERATOR_SYSTEM_PROMPT,
             user_prompt=build_response_generation_prompt(request),
             output_model=GeneratedResponse,
-            temperature=0.55,
+            temperature=RESPONSE_GENERATION_PROMPT.temperature,
         )
         return self.post_process(generated=generated, request=request)
 

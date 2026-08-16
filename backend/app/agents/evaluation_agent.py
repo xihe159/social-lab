@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from hashlib import sha256
 
-from app.agents.prompts import EVALUATION_SYSTEM_PROMPT, build_evaluation_user_prompt
+from app.prompts.strategy import (
+    EVALUATION_PROMPT,
+    EVALUATION_PROMPT_VERSION,
+    EVALUATION_SYSTEM_PROMPT,
+    build_evaluation_user_prompt,
+)
 from app.llm.client import generate_structured
 from app.schemas.evaluation import (
     EvaluationScoreItem,
@@ -16,7 +21,6 @@ from app.schemas.evaluation import (
 from app.services.simulation_quality import weighted_simulation_score
 
 
-EVALUATION_PROMPT_VERSION = "evaluation-v2.5-v21-hard-errors-only"
 _DIMENSIONS = (
     "persona_fidelity",
     "dyadic_consistency",
@@ -79,7 +83,7 @@ class EvaluationAgent:
             system_prompt=EVALUATION_SYSTEM_PROMPT,
             user_prompt=build_evaluation_user_prompt(request),
             output_model=SimulationEvaluationResponse,
-            temperature=0.1,
+            temperature=EVALUATION_PROMPT.temperature,
         )
         return self.post_process(result=result, request=request)
 

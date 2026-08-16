@@ -4,6 +4,7 @@ from typing import Iterable, List, Tuple
 
 from app.agents.prompts import SAFETY_SYSTEM_PROMPT, build_safety_user_prompt
 from app.llm.client import LLMClientError, generate_structured
+from app.prompts.session import SAFETY_PROMPT
 from app.schemas.safety import SafetyCheckRequest, SafetyCheckResponse
 
 
@@ -80,6 +81,7 @@ class SafetyAgent:
                 system_prompt=SAFETY_SYSTEM_PROMPT,
                 user_prompt=build_safety_user_prompt(payload),
                 output_model=SafetyCheckResponse,
+                temperature=SAFETY_PROMPT.temperature,
             )
             return self.post_process(result=result, rule_result=rule_result)
 

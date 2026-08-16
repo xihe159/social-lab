@@ -26,3 +26,25 @@ tsconfig.tsbuildinfo
 # Runtime caches
 .cache/
 .codex-scratch-design/
+
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python test / tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Temporary files
+*.tmp
+*.temp

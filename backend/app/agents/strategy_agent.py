@@ -8,6 +8,7 @@ from app.agents.prompts import (
     build_strategy_user_prompt,
 )
 from app.llm.client import generate_structured
+from app.prompts.strategy import STRATEGY_PROMPT
 from app.schemas.strategy import (
     ResponseMode,
     ResponseModeHypothesis,
@@ -53,7 +54,7 @@ class StrategyAgent:
             system_prompt=STRATEGY_SYSTEM_PROMPT,
             user_prompt=build_strategy_user_prompt(request),
             output_model=TargetResponseGuidance,
-            temperature=0.2,
+            temperature=STRATEGY_PROMPT.temperature,
         )
         guidance = self.post_process(result=result, request=request)
 
